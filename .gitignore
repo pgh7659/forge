@@ -1,0 +1,40 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS and editor files
+.DS_Store
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Build and cache output
+build/
+dist/
+tmp/
+.cache/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Infrastructure state
+.terraform/
+*.tfstate
+*.tfstate.*
