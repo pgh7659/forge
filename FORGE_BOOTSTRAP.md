@@ -82,9 +82,16 @@ Important decisions become permanent documentation.
 
 ## Git First
 
-Git is the single source of truth.
+Git is the source of truth for code, reviewable configuration, documentation,
+and durable engineering decisions.
 
-If work cannot be represented in Git, it is not considered complete.
+Runtime state, credentials, conversations, and uncommitted work are not made
+safe merely by existing on the Forge host. They require an explicit owner,
+retention policy, and backup or disposal rule.
+
+Work that changes a project is not considered durable until its reviewable
+result is represented in Git. Operational state that does not belong in Git
+must remain reproducible or recoverable by a documented mechanism.
 
 ## Infrastructure as Code
 
@@ -100,11 +107,19 @@ Automation should make work safer, not less accountable.
 
 High-risk operations require explicit human approval and a clear rollback path.
 
+An agent runtime installed on a dedicated host is not a security boundary.
+Filesystem access, shell access, messaging authorization, and model credentials
+must each be constrained independently.
+
 ## Replaceability
 
 Every component should assume it can be replaced tomorrow.
 
 Interfaces are more important than implementations.
+
+Replaceability does not justify building abstractions before the first runtime
+has been operated successfully. Forge first validates native capabilities, then
+abstracts only boundaries that have demonstrated a real need to change.
 
 ---
 
@@ -116,6 +131,8 @@ Interfaces are more important than implementations.
 - Automation must remain explainable.
 - Every change should have a rollback path.
 - Architecture should minimize coupling.
+- Prefer verified native capabilities over speculative custom infrastructure.
+- Record version-dependent behavior before automating it.
 
 ---
 
@@ -216,6 +233,8 @@ Forge is not:
 - a Codex wrapper
 - a prompt collection
 - an autonomous software company
+- a promise of unattended production changes
+- a substitute for backups, access control, or engineering review
 
 Forge is infrastructure for AI engineering.
 

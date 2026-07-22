@@ -1,0 +1,22 @@
+[Unit]
+Description=Hermes Agent Dashboard (loopback only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/hermes dashboard --host 127.0.0.1 --port 9119 --no-open
+Restart=on-failure
+RestartSec=5
+UMask=0077
+
+# The dashboard edits Hermes configuration and state but should not write to
+# the rest of the host filesystem.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=%h/.hermes
+
+[Install]
+WantedBy=default.target
