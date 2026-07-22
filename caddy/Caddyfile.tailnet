@@ -1,0 +1,13 @@
+{
+	auto_https off
+}
+
+# Internal-only compatibility proxy for Hermes 0.19 host validation.
+# Tailscale Serve terminates HTTPS and forwards to this loopback listener.
+:9120 {
+	bind 127.0.0.1
+
+	reverse_proxy 127.0.0.1:9119 {
+		header_up Host 127.0.0.1:9119
+	}
+}
