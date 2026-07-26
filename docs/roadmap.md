@@ -24,6 +24,8 @@ The direction is now explicit:
 -   first operator interface: Discord
 -   first private access layer: Tailscale
 -   first workspace model: protected checkout plus Hermes-native worktree
+-   security baseline: runtime-neutral trust, taint, provenance, policy, and
+    sink contracts, with enforcement deferred to tested adapters
 
 ## Phase 0 - Foundation and Decisions
 
@@ -31,6 +33,7 @@ Goals:
 
 -   stabilize the core documents
 -   create initial ADRs
+-   adopt the FGE-SEC-01 security contracts and threat model
 -   clarify the first deployment shape
 -   avoid premature implementation drift
 
@@ -39,6 +42,8 @@ Exit criteria:
 -   README, bootstrap, agents, architecture, and roadmap agree with each other
 -   initial ADRs exist for Hermes, Discord, Tailscale, host install, and native
     worktree strategy
+-   security contracts distinguish documented design, proposed implementation,
+    and adapter or host enforcement
 -   the repository states what is chosen versus what is only deferred
 
 ## Phase 1 - OCI Environment Audit

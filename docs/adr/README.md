@@ -16,3 +16,5 @@ rule.
 -   `0005-use-protected-checkouts-and-hermes-worktrees.md` - protected checkouts
     and Hermes-native task worktrees
 -   `0006-use-hermes-profiles-kanban-and-provider-fallback.md`
+-   `0007-adopt-runtime-neutral-security-contracts.md` - trust, taint,
+    provenance, policy-decision, and sink contracts

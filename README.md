@@ -62,11 +62,13 @@ If you are new to the repository, read in this order:
 2. `AGENTS.md`
 3. `docs/architecture.md`
 4. `docs/roadmap.md`
-5. relevant files in `docs/adr/`
+5. `SECURITY.md` and `docs/security/` for security-sensitive work
+6. relevant files in `docs/adr/`
 
 ## Repository layout
 
-- `docs/` holds architecture, roadmap, and architectural decisions.
+- `docs/` holds architecture, roadmap, security contracts, threat models, and
+  architectural decisions.
 - `bootstrap/` will hold first-run and host bootstrap assets.
 - `scripts/` will hold repeatable automation for repository and operator tasks.
 - `systemd/` will hold Linux service units and timers.
@@ -85,6 +87,7 @@ Implemented today:
 - constitution and operating rules
 - architecture and roadmap
 - initial ADRs
+- runtime-neutral security contracts and threat model documentation
 - repository scaffold
 
 Not implemented yet:
@@ -99,6 +102,14 @@ Not implemented yet:
 No document in this repository should be read as evidence that an OCI host is
 already configured. Until the relevant phase is implemented and its acceptance
 checks pass, it is a chosen design rather than an operating capability.
+
+## Security
+
+Read [`SECURITY.md`](SECURITY.md) before reporting a vulnerability or making a
+security-sensitive change. Forge has chosen generalized trust, taint,
+provenance, policy-decision, and sink contracts, documented under
+[`docs/security/`](docs/security/). Their schemas, validators, adapters, and
+host enforcement are proposed work, not current runtime capabilities.
 
 ## Validated design stance
 
