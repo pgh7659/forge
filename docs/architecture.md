@@ -35,6 +35,7 @@ Implemented today:
 -   AI operating rules
 -   architecture and roadmap
 -   ADR scaffolding
+-   runtime-neutral security contract and threat model documentation
 -   repository scaffolding for future bootstrap, config, scripts, and tests
 
 Not implemented yet:
@@ -45,6 +46,8 @@ Not implemented yet:
 -   dashboard service management
 -   repository and worktree automation
 -   backup and observability workflows
+-   security contract schemas, validators, policy evaluation, runtime adapters,
+    and host enforcement
 
 The rest of this document describes the target architecture for the first OCI
 deployment, not a claim that the runtime already exists.
@@ -376,6 +379,16 @@ provider budgets and keeps worker concurrency conservative.
 
 The first deployment assumes a personal but still security-conscious operator
 node.
+
+Forge has chosen runtime-neutral trust, taint, provenance, policy-decision, and
+sink contracts in
+[`docs/security/trust-taint-provenance.md`](security/trust-taint-provenance.md).
+The generalized threat model is
+[`docs/security/threat-model.md`](security/threat-model.md). Those documents are
+implemented as design contracts only. Forge core will declare and validate the
+contracts; runtime and host adapters must separately implement and demonstrate
+enforcement. No current document should be read as evidence of sandboxing or
+host-level enforcement.
 
 Rules:
 
