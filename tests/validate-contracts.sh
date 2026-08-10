@@ -12,10 +12,10 @@ python3 -m json.tool templates/codex-result.example.json >/dev/null
 required_files=(
   docs/adr/0008-separate-assistant-control-plane-from-engineering-execution.md
   docs/operations/assistant-codex-handoff.md
+  docs/operations/discord-forum-codex-routing.md
   docs/operations/oci-assistant-control-plane-migration.md
   docs/operations/oci-environment-audit.md
   prompts/hermes-assistant-soul.md
-  prompts/hermes-ops-soul.md
   templates/codex-task-envelope.example.json
   templates/codex-result.example.json
 )
@@ -23,6 +23,8 @@ required_files=(
 for required_file in "${required_files[@]}"; do
   test -s "$required_file"
 done
+
+test ! -e prompts/hermes-ops-soul.md
 
 if grep -R -E '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|gh[opurs]_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,})' \
   --exclude-dir=.git .; then

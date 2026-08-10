@@ -2,11 +2,16 @@
   "contract_version": "forge.task/v1alpha1",
   "task_id": "example-task-id",
   "source": {
-    "kind": "discord-thread",
-    "reference": "opaque-private-reference"
+    "kind": "discord-forum-post",
+    "channel_reference": "opaque-project-channel-reference",
+    "post_reference": "opaque-forum-post-reference",
+    "message_reference": "opaque-source-message-reference"
   },
-  "classification": "implement",
+  "project": "registered-project-key",
+  "mode": "run",
+  "request_id": "opaque-immutable-inbox-reference",
   "raw_request": "Preserve the operator request verbatim in private task state.",
+  "raw_request_sha256": "replace-with-lowercase-hex-sha256",
   "repository": {
     "full_name": "owner/repository",
     "base_ref": "main",
@@ -18,7 +23,7 @@
     "owner": "oci"
   },
   "acceptance_criteria": [
-    "Replace this example with reviewed, testable criteria."
+    "Replace this example with criteria accepted after planning."
   ],
   "validation_commands": [],
   "allowed_actions": [
@@ -43,7 +48,7 @@
   "handoff": {
     "last_pushed_commit": null,
     "pull_request": null,
-    "status": "ready",
-    "blockers": []
+    "state": "queued",
+    "waiting_on": []
   }
 }

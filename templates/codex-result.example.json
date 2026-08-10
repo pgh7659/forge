@@ -1,7 +1,7 @@
 {
   "contract_version": "forge.result/v1alpha1",
   "task_id": "example-task-id",
-  "status": "needs_review",
+  "state": "review_ready",
   "summary": "Describe only work supported by the executor evidence.",
   "repository": {
     "full_name": "owner/repository",
@@ -18,7 +18,8 @@
     }
   ],
   "risks": [],
-  "blockers": [],
+  "issues": [],
+  "waiting_on": [],
   "approval_requests": [],
   "remaining_work": [],
   "executor": {

@@ -80,11 +80,10 @@ surface the uncertainty.
 
 -   Treat OCI as the first deployment target, not the permanent platform
     identity.
--   Prefer Hermes-native capabilities when they satisfy the requirement:
-    profiles, Kanban, gateway, provider fallback, and dashboard should be used
-    before inventing custom orchestration.
--   Do not assume Hermes supports multi-host Kanban. The initial design is
-    single-host.
+-   Preserve the existing Hermes Discord gateway, provider fallback, and
+    dashboard where they satisfy the personal-assistant requirement.
+-   Do not route engineering work through Hermes Kanban or a Hermes coding
+    profile. Forge owns the immutable inbox, task ledger, and Codex dispatcher.
 -   Keep Hermes profile state under `~/.hermes` and Forge operational assets
     under `/srv/forge` unless an ADR changes that boundary.
 
@@ -92,9 +91,8 @@ surface the uncertainty.
 
 -   Repository source-of-truth remains Git.
 -   Protected working checkouts belong under `/srv/forge/repos`.
--   Coding tasks should use Hermes' native `worktree` workspace mode, which
-    creates task-local worktrees under the repository's `.worktrees/`
-    directory by default.
+-   Coding tasks use Forge-managed task-local worktrees. The task ledger records
+    the worktree, branch, owner, Codex session, and Draft PR.
 -   Avoid designing flows that require agents to edit the canonical repository
     checkout directly.
 -   Do not add a custom bare-repository manager until native worktrees have
@@ -103,24 +101,30 @@ surface the uncertainty.
 ### Interfaces
 
 -   Discord is the primary operator interface for the first deployment.
+-   A project Forum channel maps to exactly one registered repository. A Forum
+    post maps to one work topic and primary Codex session.
+-   Post creation does not execute code. `/dev plan` is read-only; `/dev run`
+    explicitly authorizes implementation within the declared task boundary.
 -   Dashboard access must assume Tailscale-only exposure plus dashboard auth.
 -   Never document or implement a public-internet dashboard exposure path as
     the default.
 
 ### Assistant and Engineering Execution
 
--   Hermes owns the personal-assistant and control-plane responsibilities:
-    request capture, factual status, reminders, registered operations,
-    approvals, and task dispatch.
--   Preserve the operator's raw request. Enrichment may append resolved facts,
-    but must not silently replace the original request before dispatch.
--   Route ambiguous product, architecture, roadmap, or interactive engineering
-    work to direct Codex instead of manufacturing acceptance criteria.
+-   Hermes owns personal conversation, reminders, factual status, routing
+    confirmation, and delivery of Codex questions and results.
+-   The Discord gateway captures the original message before model
+    interpretation. Hermes dispatches only an opaque request ID and mode; it
+    must never supply a generated summary as executor input.
+-   Normal input waits use the Forge `waiting_user` state, release the executor
+    process, and resume the same Codex session from the Forum post. Do not model
+    them as Kanban blocks.
 -   Codex is the first engineering executor. It operates only in a task-local
     worktree and returns reviewable Git and validation evidence.
 -   Cross-device continuation uses pushed refs, Draft PRs, and explicit handoff
     records. Do not claim private session continuity across runtimes.
 -   No two executors may own the same task branch concurrently.
+-   Initial Codex concurrency is one running process globally.
 -   Merge, deployment, migration, credential use, publication, and destructive
     operations require scoped human approval.
 

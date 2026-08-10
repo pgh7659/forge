@@ -1,4 +1,4 @@
-# ADR-0008: Separate Assistant Control Plane from Engineering Execution
+# ADR-0008: Use Hermes as a Personal Assistant and Forge as the Codex Dispatcher
 
 ## Status
 
@@ -10,132 +10,151 @@ Accepted
 
 ## Context
 
-Forge's first OCI deployment proved that Discord and Hermes are useful as an
-always-available personal operator surface. It also exposed a quality boundary:
-when Hermes interprets an ambiguous product request and then relays a rewritten
-version to a coding agent, intent, conversational context, progress, and review
-feedback are lost.
+The first OCI deployment connected one Hermes default profile to Discord and
+used a separate `forge-worker` Hermes profile plus Kanban for engineering work.
+Operating experience showed that the extra agent and Kanban blocking lifecycle
+lost request fidelity, produced weaker engineering results, and repeatedly left
+work waiting in a blocked board state.
 
-The operator also develops directly through Codex on local or hosted workspaces.
-Those workspaces must interoperate with OCI without copying directories or
-sharing an uncommitted checkout.
+The operator needs Discord as an always-available mobile interface, but wants
+Codex to own engineering discussion and implementation. Hermes must not shorten,
+reinterpret, or replace the original development request before Codex receives
+it.
 
-ADR-0006 chose Hermes profiles and Kanban as the initial multi-agent execution
-model and treated external coding CLIs as optional specialist tools. That remains
-appropriate for durable task coordination, but it is too broad for engineering
-execution after operating experience showed that direct Codex collaboration is
-materially more effective for design and implementation.
+Discord is already organized as one general `operator` channel and one Forum
+channel per project. Each Forum post is a Discord thread and provides a natural
+boundary for one work topic.
 
 ## Decision Drivers
 
-- Preserve the operator's original request and direct engineering feedback loop.
-- Keep Discord useful as a mobile personal-assistant and operations interface.
-- Make GitHub refs and pull requests the handoff boundary across devices.
-- Reuse Hermes' gateway, profiles, Kanban, cron, and worktree capabilities.
-- Avoid filesystem synchronization and edits in production checkouts.
-- Keep merge, deployment, migration, secrets, and destructive operations under
-  explicit human approval.
+- Preserve the exact Discord request and its provenance.
+- Keep the existing Hermes and Discord gateway connection available.
+- Remove Hermes Kanban and Hermes coding profiles from engineering execution.
+- Let the operator plan, run, answer, and review from the same Forum post.
+- Make Git branches and Draft PRs the durable cross-device engineering state.
+- Keep merge, deployment, migration, credential, and infrastructure changes
+  under explicit human approval.
 
 ## Decision
 
-Forge separates the assistant control plane from engineering execution.
+### Hermes is a personal assistant
 
-### Human and direct Codex
+The existing Discord-connected Hermes default profile remains physically in
+place during migration and takes the logical role `assistant`. It owns general
+conversation, reminders, factual status, routing confirmation, and delivery of
+Codex questions and results.
 
-The human operator owns product direction, priorities, approvals, and production
-judgment. Direct Codex conversations are the preferred surface for ambiguous
-requirements, architecture, roadmap decisions, interactive implementation, and
-final review.
+Hermes does not edit repositories, decompose engineering work, create
+engineering Kanban cards, manufacture acceptance criteria, or summarize a raw
+development request for the executor. The stopped `forge-worker` profile is
+retained only for rollback until the new path is accepted, then retired.
 
-### Hermes assistant control plane
+No additional Hermes `ops`, coder, or reviewer profile is part of the initial
+target. Registered operational procedures are deterministic Forge runbooks with
+their own approval gates, not autonomous Hermes roles.
 
-The Discord-connected Hermes profile is named `assistant`. It owns request
-capture, reminders, factual status summaries, scheduled reports, approval
-routing, Kanban state, and dispatch. It may execute explicitly registered
-operations runbooks.
+### Discord project and work boundaries
 
-Repository and worklog collection is request-driven by default. Scheduled
-briefs may use a cached incremental cursor, but Forge does not repeatedly scan
-all history merely to keep the OCI host busy. A schedule must have an operator
-need, bounded cost, retention policy, and failure notification.
+The Discord routing contract is deterministic:
 
-Hermes must preserve the operator's raw request. It may append resolved facts
-such as repository, base ref, task identifier, and acceptance criteria, but it
-must not silently replace the raw request with a summary.
+- `operator` receives personal-assistant conversation and requests with no
+  resolved project;
+- `forum-forge` maps to the Forge project;
+- `forum-worklog` maps to the Worklog project;
+- `forum-newsdigest` maps to the News Digest project; and
+- new project Forum channels require an explicit private registration.
 
-### Engineering executor
+A Forum channel represents one project. A Forum post represents one work topic
+and one primary Codex session. Creating a post does not start execution. If the
+scope splits into an independently reviewable outcome, the assistant proposes a
+new post and links the original messages without replacing them with a summary.
 
-Codex is the first engineering executor. A version-verified adapter may start or
-resume Codex CLI sessions in a task-local worktree and consume machine-readable
-events and a structured final result. The adapter is an implementation detail;
-the durable handoff is the Git branch, commit, Draft PR, tests, and task record.
+The default command is `/dev plan`, which permits repository inspection and a
+Codex plan or questions but no code modification. `/dev run` explicitly permits
+implementation. Commit, task-branch push, validation, and Draft PR creation are
+allowed during an accepted run. Merge and deployment remain approval-gated.
 
-Forge does not promise that a Hermes conversation, direct Codex conversation,
-or another CLI can share private model-session state. Continuation across
-surfaces uses GitHub plus an explicit handoff record.
+### Immutable request inbox
 
-### Operations profile
+The Discord gateway records the source message before model interpretation and
+assigns an opaque request identifier. Private Forge state stores the exact raw
+message, Discord message and thread references, author, project registration,
+receive time, and a content hash.
 
-An optional `ops` profile runs only registered read-only or reversible runbooks,
-such as status collection, incremental synchronization, health checks, and
-backup verification. Infrastructure mutation, deployment, migration, credential
-use, and destructive actions require scoped human approval.
+Hermes dispatches only the opaque request identifier and requested mode. The
+dispatcher reloads and verifies the original message independently. Any
+assistant summary is display-only and can never become the executor request.
 
-### Reviewer
+### Forge task ledger replaces Hermes Kanban
 
-Review is an independent verification pass, not an autonomous product decision.
-CI provides deterministic checks. A reviewer profile or Codex review session may
-inspect the diff read-only, but the human remains the final approval authority.
+Forge owns a small durable task ledger independent from Hermes. Initial states
+are `queued`, `running`, `waiting_user`, `waiting_approval`, `review_ready`,
+`failed`, `cancelled`, and `completed`.
+
+`waiting_user` is a normal suspended state, not a Kanban block. The Codex
+process exits, while its session identifier, worktree, branch, and exact pending
+question remain durable. A reply in the same Forum post resumes that session.
+A waiting task consumes no executor slot.
+
+The initial deployment runs at most one Codex executor process at a time.
+
+### Codex is the only engineering executor
+
+Forge starts or resumes a version-verified Codex CLI session in a dedicated Git
+worktree. It provides trusted repository and permission metadata around the
+unchanged raw request, consumes machine-readable events, and records a
+structured result.
+
+Codex may inspect, plan, implement, test, commit, push only its task branch, and
+create or update a Draft PR within the accepted mode. It may not merge, deploy,
+migrate, publish, expand credentials, modify host access, or destroy retained
+work without fresh approval.
+
+Direct Codex and OCI Codex sessions do not share hidden conversation state.
+Git refs, Draft PRs, validation evidence, and explicit handoff records are the
+durable cross-device boundary.
 
 ### Repository and deployment boundary
 
-Every coding task uses a branch and task-local worktree. Local, cloud, and OCI
-workers synchronize through pushed Git refs and Draft PRs, never through
-filesystem mirroring. The protected checkout and production release are not
-agent workspaces. Production consumes only an approved commit from the protected
-branch.
-
-## Task Classification
-
-- `status`: Hermes answers from observed state without proposing roadmap work.
-- `ops`: Hermes runs a registered runbook within its declared authority.
-- `implement`: Hermes dispatches the raw request and task envelope to Codex.
-- `design`: Hermes records context and routes the operator to direct Codex.
-- `privileged`: Hermes records the request and waits for explicit approval.
-
-Ambiguous requests fail toward `design`, not unattended implementation.
+Every run uses a protected checkout plus a task-local worktree managed by
+Forge. The implementation does not depend on Hermes Kanban workspace lifecycle.
+Production checkouts, runtime databases, secrets, and releases are never task
+workspaces.
 
 ## Relationship to Previous Decisions
 
-- ADR-0001 remains valid: Hermes is the initial orchestration runtime.
-- ADR-0003 remains valid: Discord is the primary assistant and operations
-  interface, but it is not the source of engineering truth.
-- ADR-0005 remains valid: coding runs in task-local worktrees.
-- This ADR supersedes the part of ADR-0006 that treats external coding CLIs as
-  merely optional specialists. Codex is now the first engineering executor;
-  Hermes Kanban remains the durable single-host coordination plane.
-- ADR-0007 applies to task envelopes, approvals, tool output, and executor
-  adapters. A contract decision is not proof of host enforcement.
+- ADR-0001 is superseded where it names Hermes as the engineering orchestrator;
+  Hermes remains the initial personal-assistant runtime and Discord gateway.
+- ADR-0003 remains valid for Discord, but its worker-profile and Kanban topology
+  is superseded by Forum routing and the Forge dispatcher.
+- ADR-0005 remains valid for protected checkouts and worktree isolation, but
+  Forge rather than Hermes Kanban owns worktree lifecycle.
+- ADR-0006 is superseded for profiles and Kanban. Provider fallback remains a
+  Hermes conversational concern and is independent from Codex session recovery.
+- ADR-0007 applies to the inbox, task ledger, executor, approvals, and results.
 
 ## Consequences
 
 Benefits:
 
-- better fidelity for product and engineering work;
-- a useful always-on personal assistant without making it the coding brain;
-- explicit handoff across local, cloud, and OCI environments;
-- smaller, testable adapter and approval boundaries.
+- the request sent to Codex is independently verifiable and unchanged;
+- Discord Forum posts provide project and session boundaries without Kanban;
+- questions suspend cleanly without occupying an executor or blocked card;
+- Hermes stays useful without acting as a weaker engineering intermediary;
+- GitHub remains the recoverable and device-independent engineering boundary.
 
 Costs:
 
-- Forge must maintain a Codex execution adapter and session/task mapping;
-- direct and Discord conversations do not share hidden session context;
-- OCI needs a private deployment inventory and tested recovery path;
-- tasks require checkpoints in Git before ownership moves between environments.
+- Forge must implement an inbox, dispatcher, task ledger, Discord routing
+  adapter, worktree manager, and Codex session adapter;
+- the existing Hermes coding profile and Kanban history require archival;
+- Discord message retention and private task retention need explicit policy;
+- local and OCI Codex conversations still require Git-based handoff.
 
 ## Rollback
 
-Disable the Codex adapter and return engineering tasks to manually operated
-worktrees. Hermes' assistant, Kanban, Discord, and operations functions remain
-usable. Superseding this decision requires a new ADR and must preserve Git-based
-handoff and human approval boundaries.
+Stop the Forge dispatcher and restore the backed-up Hermes identity and gateway
+configuration. Keep every dirty worktree and pushed task branch. The old
+`forge-worker` profile remains stopped and available only during the acceptance
+window; rollback does not authorize new Kanban engineering work without an
+explicit operator decision.

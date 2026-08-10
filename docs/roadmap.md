@@ -22,12 +22,13 @@ repository's audit and acceptance contract.
 The direction is now explicit:
 
 -   first host: OCI Ubuntu ARM64
--   first orchestrator runtime: Hermes
+-   first personal-assistant runtime: Hermes
 -   first operator interface: Discord
 -   first private access layer: Tailscale
--   first workspace model: protected checkout plus Hermes-native worktree
--   assistant control plane: Hermes and Discord
--   engineering decision surface: direct Codex
+-   first workspace model: protected checkout plus Forge-managed worktree
+-   personal-assistant gateway: Hermes and Discord
+-   engineering decision surface: direct Codex or Discord-routed Codex
+-   engineering state: Forge inbox and task ledger, not Hermes Kanban
 -   first engineering executor: version-verified Codex CLI adapter
 -   security baseline: runtime-neutral trust, taint, provenance, policy, and
     sink contracts, with enforcement deferred to tested adapters
@@ -45,8 +46,8 @@ Goals:
 Exit criteria:
 
 -   README, bootstrap, agents, architecture, and roadmap agree with each other
--   initial ADRs exist for Hermes, Discord, Tailscale, host install, and native
-    worktree strategy
+-   initial ADRs exist for Hermes, Discord, Tailscale, host install, and
+    protected-worktree strategy, with superseded assumptions identified
 -   security contracts distinguish documented design, proposed implementation,
     and adapter or host enforcement
 -   the repository states what is chosen versus what is only deferred
@@ -167,31 +168,33 @@ Exit criteria:
 -   deny-all behavior is confirmed when no allowlist matches
 -   bot permissions are minimal and an unauthorized-user test is recorded
 
-## Phase 6 - Profiles, Kanban, and Workflow Roles
+## Phase 6 - Discord Forum Routing and Immutable Inbox
 
 Goals:
 
--   define initial profiles
--   initialize Kanban
--   validate the first multi-agent loop
--   create a separate board for the first project or operational domain
+-   keep one Hermes personal-assistant profile
+-   register the operator channel and project Forum channels
+-   capture source messages before model interpretation
+-   validate one Forum post as one work topic and Codex-session boundary
 
-Expected profiles after the single-profile vertical slice succeeds:
+Expected initial Discord map:
 
--   assistant
--   optional ops
+-   `operator`: personal-assistant and unresolved-project conversation
+-   `forum-forge`: Forge
+-   `forum-worklog`: Worklog
+-   `forum-newsdigest`: News Digest
 
 Exit criteria:
 
--   a task can be created, assigned, run, and completed through Hermes Kanban
--   role boundaries are documented
--   ambiguous design work is routed to direct Codex
--   implementation dispatch preserves the operator's raw request
--   concurrency limits are conservative and explicit
--   automatic triage decomposition remains off until manually reviewed task
-    flow is stable
--   profile boundaries are not presented as host credential or filesystem
-    isolation
+-   post creation performs no engineering action
+-   `/dev plan` and `/dev run` are explicit, distinct modes
+-   the dispatcher retrieves the original message by request ID and verifies
+    its hash
+-   a scope split creates a linked Forum post instead of silently expanding the
+    task
+-   unauthorized channels, users, and project mappings fail closed
+-   `forge-worker` remains stopped and no Hermes engineering Kanban card is
+    created
 
 ## Phase 7 - Repository and Workspace Automation
 
@@ -207,7 +210,7 @@ Expected scope:
 -   request-driven repository and worklog collection
 -   incremental cursors for explicitly scheduled briefs
 -   protected checkout setup
--   Hermes-native worktree creation
+-   Forge-managed worktree creation
 -   worktree cleanup checks
 -   branch naming and task metadata conventions
 
@@ -219,14 +222,15 @@ Exit criteria:
 -   project checkouts are protected from task edits
 -   cleanup does not destroy unreviewed work
 
-## Phase 8 - Codex Executor and Provider Resilience
+## Phase 8 - Forge Task Ledger and Codex Executor
 
 Goals:
 
 -   configure Hermes provider fallback
 -   record the installed OCI Codex version and command contract
--   implement the task-envelope and structured-result adapter
--   implement Codex session and GitHub handoff state
+-   implement the private task ledger and immutable request adapter
+-   implement task-envelope and structured-result validation
+-   implement Codex session, waiting, and GitHub handoff state
 -   configure Hermes provider fallback without treating it as Codex session
     failover
 
@@ -234,6 +238,8 @@ Expected scope:
 
 -   fallback provider policy
 -   version-verified Codex non-interactive execution and resume behavior
+-   `queued`, `running`, `waiting_user`, `waiting_approval`, `review_ready`,
+    `failed`, `cancelled`, and `completed` transitions
 -   branch, Draft PR, validation, and approval result contract
 -   optional adapters for other CLIs only after the Codex path is stable
 
@@ -242,6 +248,9 @@ Exit criteria:
 -   provider failures degrade gracefully
 -   Hermes provider failure and Codex executor-session failure have distinct,
     observable recovery paths
+-   `waiting_user` exits the Codex process, releases the executor slot, and
+    resumes from the same Forum post
+-   initial global Codex concurrency is one
 -   one accepted task can be dispatched to Codex in a worktree and handed to a
     direct Codex session through GitHub without directory synchronization
 
@@ -273,19 +282,21 @@ Exit criteria:
 
 ## First Vertical Slice
 
-Before expanding to multiple profiles or projects, Forge must complete one
+Before adding more projects or executor concurrency, Forge must complete one
 end-to-end task through this path:
 
 ```text
 Discord request
   -> Hermes gateway
-  -> assistant classification and raw-request capture
-  -> manually reviewed Kanban task envelope
-  -> one task worktree
+  -> immutable inbox capture before model interpretation
+  -> registered project Forum post
+  -> /dev plan with no repository writes
+  -> explicit /dev run
+  -> Forge task ledger and one task worktree
   -> Codex implementation and validation
   -> pushed Git checkpoint and Draft PR
   -> optional handoff to direct Codex on another device
-  -> Discord completion report
+  -> structured result in the same Forum post
 ```
 
 The slice uses a disposable or non-sensitive repository. Its purpose is to

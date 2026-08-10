@@ -19,7 +19,8 @@ Forge coordinates:
 - infrastructure required to run the system repeatedly
 
 Forge is not a thin wrapper around one model or one agent runtime. Hermes is
-the initial orchestrator, not the identity of the platform.
+the initial personal-assistant gateway, not the engineering orchestrator or the
+identity of the platform.
 
 ## Why this repository exists
 
@@ -40,12 +41,12 @@ The current direction, intentionally, is:
 
 - OCI Ubuntu ARM64 as the first host
 - Hermes installed directly on the host for the first deployment
-- Discord and Hermes as the personal-assistant and operations control plane
+- Discord and one Hermes profile as the personal-assistant gateway
 - Tailscale-only access for the Hermes dashboard
-- Hermes Kanban for durable task state and approval routing
-- direct Codex for product, architecture, and interactive engineering decisions
+- direct or Discord-routed Codex for product, architecture, and engineering
+- a Forge immutable inbox and task ledger for Discord engineering requests
 - Codex CLI as the first version-verified engineering executor
-- protected Git checkouts plus Hermes-native task worktrees for code isolation
+- protected Git checkouts plus Forge-managed task worktrees for code isolation
 - provider fallback for resilience before custom multi-CLI handoff logic
 
 The design has been checked against current upstream Hermes documentation, but
@@ -94,8 +95,8 @@ Implemented today:
 - architecture and roadmap
 - initial ADRs
 - runtime-neutral security contracts and threat model documentation
-- assistant-control-plane and engineering-executor responsibility contract
-- read-only OCI audit and task-handoff templates
+- personal-assistant gateway and engineering-executor responsibility contract
+- Discord Forum routing, read-only OCI audit, and task-handoff templates
 - repository scaffold
 
 Reported outside this repository but not yet accepted as verified Forge
@@ -127,13 +128,14 @@ host enforcement are proposed work, not current runtime capabilities.
 
 ## Validated design stance
 
-The first deployment deliberately uses Hermes features for the assistant
-control plane before adding Forge abstractions:
+The first deployment keeps Hermes deliberately narrow:
 
 - one Discord-connected assistant gateway
-- an optional operations profile for registered runbooks
-- Kanban boards and the gateway-embedded dispatcher
-- native `worktree` workspaces for coding tasks
+- one general operator channel and one Forum channel per registered project
+- one Forum post per work topic and primary Codex session
+- no Hermes Kanban or Hermes coding profile in the engineering path
+- a Forge inbox that retrieves the original Discord message by opaque ID
+- a Forge ledger and dispatcher with Forge-managed `worktree` workspaces
 - Hermes provider fallback for API-level resilience
 - a version-verified Codex adapter for engineering execution
 
@@ -156,5 +158,6 @@ Before adding code, scripts, or services, define:
 
 The next useful milestone is deliberately smaller than the long-term vision:
 audit the existing OCI host, run one trusted Discord assistant, dispatch one
-accepted task through Codex into an isolated worktree and Draft PR, and prove
+`/dev plan` and one accepted `/dev run` through Codex into an isolated worktree
+and Draft PR, and prove
 restart, recovery, access control, and handoff to a second device.
