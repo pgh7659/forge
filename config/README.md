@@ -10,3 +10,6 @@ reports, repository registrations, host identifiers, profile overrides, and
 accepted version locks belong in the private operations inventory. Tokens,
 private keys, message contents, model auth, and raw personal or company data do
 not belong in either repository.
+
+After compatibility with the published schema is established, real environment
+configuration and secret references belong in a private deployment repository.

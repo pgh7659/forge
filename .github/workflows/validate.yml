@@ -1,4 +1,4 @@
-name: Validate Forge contracts
+name: Validate Forge contracts and CLI
 
 on:
   pull_request:
@@ -11,8 +11,27 @@ permissions:
 
 jobs:
   validate:
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.14"]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Validate contracts and scripts
-        run: make validate
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install development dependencies
+        run: python -m pip install -e '.[dev]'
+      - name: Validate contracts and CLI
+        run: make validate PYTHON=python
+      - name: Build distributions
+        if: matrix.python-version == '3.12'
+        run: python -m build
+      - name: Smoke-test wheel installation
+        if: matrix.python-version == '3.12'
+        run: |
+          python -m venv wheel-smoke
+          wheel-smoke/bin/pip install dist/forge_control-0.1.0.dev0-py3-none-any.whl
+          wheel-smoke/bin/forge --version
+          wheel-smoke/bin/forge validate --config examples/environments/minimal.yaml

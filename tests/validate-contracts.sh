@@ -13,6 +13,11 @@ python3 -m json.tool \
 python3 -m json.tool \
   docs/reference-deployments/hermes-discord-codex/contracts/codex-result.example.json \
   >/dev/null
+python3 -m json.tool \
+  src/forge/resources/schemas/environment-v1alpha1.schema.json >/dev/null
+
+test -s pyproject.toml
+test -s examples/environments/minimal.yaml
 
 required_files=(
   docs/adr/0009-separate-portable-core-from-deployment-profiles.md
@@ -68,7 +73,12 @@ grep -q 'Deployment-specific rules' AGENTS.md
 test ! -e prompts/hermes-ops-soul.md
 
 if grep -R -E '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|gh[opurs]_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,})' \
-  --exclude-dir=.git .; then
+  --exclude-dir=.git \
+  --exclude-dir=.venv \
+  --exclude-dir=build \
+  --exclude-dir=dist \
+  --exclude-dir=wheel-smoke \
+  .; then
   printf 'credential-like content detected\n' >&2
   exit 1
 fi

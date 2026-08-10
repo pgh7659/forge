@@ -7,13 +7,18 @@ than requiring one host, assistant, executor, or provider.
 ## Implemented now
 
 The repository currently provides the constitution, runtime-neutral security
-contracts, approved portable MVP design, and repository scaffold. It does not
-yet provide a deployed controller, adapter runtime, or infrastructure
-reconciliation.
+contracts, approved portable MVP design, an installable development package,
+and offline validation of the `forge.dev/v1alpha1` environment contract.
 
-The first executable milestone is `forge.dev/v1alpha1` plus `forge validate`.
-That milestone will make a versioned environment contract testable before any
-planning or mutation capability is introduced.
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[dev]'
+.venv/bin/forge validate --config examples/environments/minimal.yaml
+```
+
+Implemented: installable development package and offline v1alpha1 validation.
+Designed but not implemented: plan, apply, doctor, controller, runtime state,
+and all concrete runtime adapters.
 
 ## Reference deployments
 

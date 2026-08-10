@@ -4,6 +4,14 @@ Validation and regression checks live here.
 
 Tests should focus first on contracts, safety rules, and repeatable workflows.
 
-Run `make validate` to syntax-check public scripts, validate the example task
-envelope, assert required role-contract artifacts, and scan for common
-credential patterns.
+Set up the local development environment and run the complete validation flow:
+
+```bash
+make setup
+make validate
+```
+
+`make validate` syntax-checks public scripts, validates JSON contracts and the
+synthetic `forge.dev/v1alpha1` environment, runs the Python test suite, asserts
+required public artifacts, and scans source inputs for common credential
+patterns.
