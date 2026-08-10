@@ -15,13 +15,18 @@ python3 -m json.tool \
   >/dev/null
 python3 -m json.tool \
   src/forge/resources/schemas/environment-v1alpha1.schema.json >/dev/null
+python3 -m json.tool \
+  src/forge/resources/schemas/plan-v1alpha1.schema.json >/dev/null
 
 test -s pyproject.toml
 test -s examples/environments/minimal.yaml
+test -s examples/environments/noop.yaml
 
 required_files=(
   docs/adr/0009-separate-portable-core-from-deployment-profiles.md
   docs/operations/README.md
+  docs/superpowers/plans/2026-08-10-planning-client.md
+  docs/superpowers/specs/2026-08-10-planning-client-design.md
   docs/reference-deployments/hermes-discord-codex/README.md
   docs/reference-deployments/hermes-discord-codex/AGENTS.md
   docs/reference-deployments/hermes-discord-codex/architecture.md

@@ -8,22 +8,34 @@ than requiring one host, assistant, executor, or provider.
 
 The repository currently provides the constitution, runtime-neutral security
 contracts, approved portable MVP design, an installable development package,
-and offline validation of the `forge.dev/v1alpha1` environment contract.
+offline validation of the `forge.dev/v1alpha1` Environment contract, and
+deterministic planning for the exact built-in `noop+noop` adapter tuple.
 
 ```bash
+# Python >=3.12
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
+make validate
 .venv/bin/forge validate --config examples/environments/minimal.yaml
+.venv/bin/forge plan --config examples/environments/noop.yaml
 ```
 
-Implemented: installable development package and offline v1alpha1 validation.
-Designed but not implemented: plan, apply, doctor, controller, runtime state,
-and all concrete runtime adapters.
+The same commands reproduce the checked-out feature branch without local
+runtime state. `forge plan --config examples/environments/noop.yaml` performs
+no target access or mutation: its built-in adapter observes `{}` and produces
+no operations. `ssh+systemd` remains schema-valid but planning-unavailable
+until a later reviewed real-adapter slice; there is no fallback or adapter
+default beyond exact built-in `noop+noop`.
 
 A successful `forge validate` checks YAML/JSON syntax, schema shape, and
 JSON-model compatibility only. It does not prove that selected adapters exist
 or work together, detect resolved secret values inside arbitrary adapter
 configuration, or establish that an environment is safe or deployable.
+
+A successful Plan is private review/audit data by default. It is not proof of
+deployability, safety, secret absence, or real target observation. Apply,
+doctor, controller/state, real adapters, `forge-ops`, OCI reconciliation,
+merge, and deployment are unimplemented or separately approval-gated.
 
 ## Reference deployments
 

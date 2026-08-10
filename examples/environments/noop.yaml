@@ -1,0 +1,8 @@
+apiVersion: forge.dev/v1alpha1
+kind: Environment
+metadata:
+  name: example-noop
+spec:
+  target:
+    connectionAdapter: noop
+    runtimeAdapter: noop

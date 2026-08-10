@@ -8,7 +8,7 @@ help:
 	@printf '%s\n' 'make setup      Create .venv and install development dependencies.'
 	@printf '%s\n' 'make test       Run Python tests.'
 	@printf '%s\n' 'make contracts  Validate public files and secret patterns.'
-	@printf '%s\n' 'make validate   Run contracts, tests, and the valid example.'
+	@printf '%s\n' 'make validate   Run contracts, tests, Environment validation, and noop planning evidence.'
 	@printf '%s\n' 'make package    Build source and wheel distributions.'
 
 setup:
@@ -24,6 +24,7 @@ contracts:
 
 validate: contracts test
 	$(PYTHON) -m forge.cli validate --config examples/environments/minimal.yaml
+	$(PYTHON) -m forge.cli plan --config examples/environments/noop.yaml
 
 package:
 	$(PYTHON) -m build

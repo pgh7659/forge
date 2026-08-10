@@ -24,15 +24,24 @@ Configuration
         -> adapters
 ```
 
-The configuration schema and `forge` CLI are the first executable slice. The
-first schema is `forge.dev/v1alpha1`; `forge validate` checks YAML/JSON syntax,
-schema shape, and JSON-model compatibility without mutation. It does not
-verify adapter existence or combinations, resolve secret references, detect
-resolved secret values in arbitrary adapter configuration, or prove runtime
-or deployment safety. Adapter and secret semantics remain later slices.
+The configuration schema and `forge` CLI are the first executable slices.
+`forge validate` checks YAML/JSON syntax, schema shape, and JSON-model
+compatibility without mutation. Slice 2 also provides deterministic planning
+only for the exact built-in `noop+noop` tuple. Its synthetic plan observes
+nothing and contains no operations, so `forge plan --config
+examples/environments/noop.yaml` performs no target access or mutation.
+`ssh+systemd` is schema-valid but planning-unavailable until a later reviewed
+real-adapter slice; no adapter alias, fallback, or provider default exists.
 
-The provisioner, controller, and adapters are proposed components, not current
-runtime capabilities. Each adapter must declare its capabilities and tested
+Validation and planning do not verify adapter availability or compatibility,
+resolve secret references, detect resolved secret values in arbitrary adapter
+configuration, or prove runtime or deployment safety. A Plan is private
+review/audit data by default, not evidence of deployability, safety, secret
+absence, or real target observation.
+
+Apply, doctor, controller/state, real adapters, `forge-ops`, OCI
+reconciliation, merge, and deployment are unimplemented or separately
+approval-gated. Each future adapter must declare its capabilities and tested
 enforcement rather than inheriting guarantees from the core.
 
 ## Reference deployments

@@ -4,12 +4,14 @@ The [approved portable MVP design](superpowers/specs/2026-08-10-portable-forge-m
 defines these ordered delivery slices. Each slice needs its own implementation
 plan and reviewable commit or PR.
 
-1. **Portable foundation:** replace deployment-specific root policy with the
+1. **Portable foundation — implemented on this feature branch:** replace deployment-specific root policy with the
    core/adapter/reference-deployment boundary and publish
    `forge.dev/v1alpha1` plus `forge validate`.
-2. **Planning client:** add target observation, deterministic plan artifacts,
-   stale-plan detection, and a no-op reference adapter.
-3. **Controller and state:** add the service protocol, SQLite ledger,
+2. **Planning client — implemented on this feature branch:** add deterministic
+   Plan artifacts, stale-plan detection, and the exact built-in `noop+noop`
+   adapter. It performs no target access or mutation; `ssh+systemd` remains
+   schema-valid but planning-unavailable pending a reviewed real adapter.
+3. **Controller and state — next:** add the service protocol, SQLite ledger,
    encryption boundary, state transitions, and restart reconciliation.
 4. **Hermes ingress reference adapter:** add capability probing, the
    pre-dispatch plugin, Unix-socket delivery, and fail-closed `/dev plan`.
@@ -25,5 +27,8 @@ plan and reviewable commit or PR.
    reference acceptance suite.
 
 `forge-ops` follows the published configuration contract; it is not created as
-part of the portable foundation. OCI reconciliation is last and remains a
-separately approved deployment action.
+part of the portable foundation. Apply, doctor, controller/state, real
+adapters, `forge-ops`, OCI reconciliation, merge, and deployment remain
+unimplemented or separately approval-gated. Plans are private review/audit
+data by default, and do not prove deployability, safety, secret absence, or
+real target observation.

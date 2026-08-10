@@ -17,3 +17,12 @@ compatibility. It does not verify adapter existence or combinations, define
 secret-reference semantics, or inspect arbitrary adapter configuration for
 resolved secret values. Passing validation is therefore not evidence that a
 configuration is safe or compatible with a deployment.
+
+The only built-in planning registration is the exact `noop+noop` pair.
+`ssh+systemd` is schema-valid but planning-unavailable until a later reviewed
+adapter slice. `forge plan --config examples/environments/noop.yaml` makes no
+target access or mutation, and its Plan is private review/audit data by default
+rather than proof of deployability, safety, secret absence, or real target
+observation. Apply, doctor, controller/state, real adapters, `forge-ops`, OCI
+reconciliation, merge, and deployment remain unimplemented or separately
+approval-gated.
