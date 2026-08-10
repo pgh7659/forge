@@ -2,10 +2,9 @@
 
 ## Status
 
-Draft for written review on 2026-08-10. The architecture direction was approved
-in design discussion; this document defines the target architecture and the
-ordered vertical slices. It does not claim that the runtime, adapters,
-provisioning, or OCI reconciliation are implemented.
+Approved for implementation planning on 2026-08-10. This document defines the
+target architecture and the ordered vertical slices. It does not claim that
+the runtime, adapters, provisioning, or OCI reconciliation are implemented.
 
 ## Problem
 
