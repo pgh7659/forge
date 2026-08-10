@@ -14,7 +14,7 @@ loopback listener through Tailscale Serve, never Tailscale Funnel.
 Install it for the Hermes operator account:
 
 ```sh
-install -D -m 0644 systemd/hermes-dashboard.service \
+install -D -m 0644 docs/reference-deployments/hermes-discord-codex/assets/systemd/hermes-dashboard.service \
   ~/.config/systemd/user/hermes-dashboard.service
 systemctl --user daemon-reload
 systemctl --user enable --now hermes-dashboard.service

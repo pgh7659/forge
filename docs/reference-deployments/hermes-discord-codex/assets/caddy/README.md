@@ -8,8 +8,8 @@ It exists because Hermes 0.19.0 requires the proxied `Host` header to match its
 Caddy must not bind public ports in this deployment. Validate before install:
 
 ```sh
-caddy validate --config caddy/Caddyfile.tailnet
-sudo install -o root -g root -m 0644 caddy/Caddyfile.tailnet \
+caddy validate --config docs/reference-deployments/hermes-discord-codex/assets/caddy/Caddyfile.tailnet
+sudo install -o root -g root -m 0644 docs/reference-deployments/hermes-discord-codex/assets/caddy/Caddyfile.tailnet \
   /etc/caddy/Caddyfile
 sudo systemctl restart caddy
 ```

@@ -1,9 +1,9 @@
 # Scripts
 
-Repeatable local automation lives here.
+Repeatable portable local automation lives here.
 
 Scripts should be small, reviewable, and safe to run more than once.
 
-- `audit-oci-host.sh` captures a read-only private deployment audit. Its output
-  can contain operational metadata and must not be committed to this public
-  repository.
+Deployment-specific scripts live beside their selected adapter or reference
+deployment. The first deployment's read-only host audit script is retained
+under the `hermes-discord-codex` reference deployment.

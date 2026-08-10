@@ -15,7 +15,7 @@ bodies, session contents, or repository source files.
 From the OCI operator account:
 
 ```sh
-FORGE_ROOT=/srv/forge ./scripts/audit-oci-host.sh > forge-oci-audit.txt
+FORGE_ROOT=/srv/forge ../scripts/audit-oci-host.sh > forge-oci-audit.txt
 chmod 0600 forge-oci-audit.txt
 ```
 
@@ -47,7 +47,7 @@ The audit is accepted when:
   accounted for;
 - public listeners and privileged credentials have explicit owners;
 - dirty or unpushed worktrees are preserved;
-- observed state is reconciled with `docs/architecture.md` and the roadmap; and
+- observed state is reconciled with `../../../architecture.md` and the roadmap; and
 - no public artifact contains the private report.
 
 ## Rollback

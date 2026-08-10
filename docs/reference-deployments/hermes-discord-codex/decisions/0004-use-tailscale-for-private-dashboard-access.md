@@ -8,6 +8,11 @@ Accepted
 
 2026-07-22
 
+## Scope
+
+This historical decision governs only the `hermes-discord-codex` reference
+deployment. It is not a portable Forge core requirement.
+
 ## Context
 
 Hermes dashboard can view and modify sensitive state, including agent control

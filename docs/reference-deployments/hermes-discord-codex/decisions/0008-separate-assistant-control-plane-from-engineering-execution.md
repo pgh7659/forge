@@ -8,6 +8,11 @@ Accepted
 
 2026-08-10
 
+## Scope
+
+This historical decision governs only the `hermes-discord-codex` reference
+deployment. It is not a portable Forge core requirement.
+
 ## Context
 
 The first OCI deployment connected one Hermes default profile to Discord and

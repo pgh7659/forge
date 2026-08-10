@@ -8,6 +8,11 @@ Accepted
 
 2026-07-22
 
+## Scope
+
+This historical decision governs only the `hermes-discord-codex` reference
+deployment. It is not a portable Forge core requirement.
+
 ## Context
 
 The first deployment target is a dedicated OCI Ubuntu ARM64 VM. Forge must

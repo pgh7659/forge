@@ -8,6 +8,11 @@ Accepted
 
 2026-07-22
 
+## Scope
+
+This historical decision governs only the `hermes-discord-codex` reference
+deployment. It is not a portable Forge core requirement.
+
 ## Context
 
 Forge needs a primary operator interface that works well on desktop and mobile,

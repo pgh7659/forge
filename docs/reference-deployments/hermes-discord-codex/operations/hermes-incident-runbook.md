@@ -118,7 +118,7 @@ remotely unless an independent console path is available.
 Validate the tracked Caddy compatibility configuration before installing it:
 
 ```sh
-caddy validate --config caddy/Caddyfile.tailnet
+caddy validate --config ../assets/caddy/Caddyfile.tailnet
 ```
 
 The template must remain loopback-only and normalize the upstream Host header

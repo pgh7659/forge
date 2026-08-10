@@ -6,6 +6,9 @@ Approved for implementation planning on 2026-08-10. This document defines the
 target architecture and the ordered vertical slices. It does not claim that
 the runtime, adapters, provisioning, or OCI reconciliation are implemented.
 
+The portable-root and reference-deployment boundary is recorded by
+[ADR-0009](../../adr/0009-separate-portable-core-from-deployment-profiles.md).
+
 ## Problem
 
 Forge began as a public, provider-independent foundation for reproducible

@@ -36,7 +36,7 @@ Change:
 
 ## Stage 0 - Read-Only Audit
 
-1. Run `scripts/audit-oci-host.sh` as the operator account.
+1. Run `../scripts/audit-oci-host.sh` as the operator account.
 2. Store the output mode `0600` in the private inventory.
 3. Record cloud network, backup, GitHub scope, Discord allowlist, and Tailscale
    evidence manually.
@@ -81,7 +81,7 @@ Using only version-verified Hermes commands:
 
 1. keep the existing physical default profile and treat `assistant` as its
    logical role;
-2. install the reviewed `prompts/hermes-assistant-soul.md` content as its
+2. install the reviewed `../prompts/hermes-assistant-soul.md` content as its
    identity;
 3. remove general repository, engineering Kanban, and unrestricted terminal
    tools from its enabled toolsets;
