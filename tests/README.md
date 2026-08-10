@@ -13,5 +13,6 @@ make validate
 
 `make validate` syntax-checks public scripts, validates JSON contracts and the
 synthetic `forge.dev/v1alpha1` environment, runs the Python test suite, asserts
-required public artifacts, and scans source inputs for common credential
-patterns.
+required public artifacts, scans source inputs for common credential patterns,
+and runs a controlled regression proving scanner failures do not echo matched
+values.

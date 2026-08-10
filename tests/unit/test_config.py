@@ -6,6 +6,7 @@ from forge.config import (
     ConfigReadError,
     ConfigValidationError,
     load_and_validate,
+    validate_document,
 )
 
 
@@ -127,3 +128,10 @@ def test_non_string_mapping_key_is_a_validation_error(tmp_path: Path) -> None:
 
     assert raised.value.issues[0].pointer == "/spec/target/config/1"
     assert raised.value.issues[0].message == "object keys must be strings for JSON"
+
+
+def test_root_schema_issue_uses_the_rfc_6901_root_pointer() -> None:
+    with pytest.raises(ConfigValidationError) as raised:
+        validate_document([])
+
+    assert raised.value.issues[0].pointer == ""

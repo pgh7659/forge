@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted
+Partially superseded by
+[ADR-0008](0008-separate-assistant-control-plane-from-engineering-execution.md)
 
 ## Date
 

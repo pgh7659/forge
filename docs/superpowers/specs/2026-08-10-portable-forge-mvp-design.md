@@ -152,7 +152,8 @@ The `forge` CLI runs on a trusted control computer. The first tested control
 computer is the operator's Mac. It provides:
 
 - `forge init`: create a local configuration skeleton;
-- `forge validate`: validate syntax, schema, references, and compatibility;
+- `forge validate`: in the first slice, validate YAML/JSON syntax, schema
+  shape, and JSON-model compatibility;
 - `forge plan`: compare desired configuration with observed target state
   without mutation;
 - `forge apply`: apply one previously reviewed plan through the selected
@@ -222,14 +223,20 @@ spec:
     adapter: github
 ```
 
-The schema identifies capabilities rather than assuming that every adapter
-supports the same operations. `forge validate` checks static compatibility;
-`forge plan` probes the target and verifies declared runtime capabilities.
-Unsupported or unverified capabilities fail closed.
+The first schema constrains document shape and adapter-identifier syntax while
+leaving adapter `config` objects opaque. In this slice, `forge validate` checks
+YAML/JSON syntax, schema shape, and JSON-model compatibility only. It does not
+verify that an adapter exists, that selected adapters can be combined, or that
+declared capabilities are available. Those compatibility checks are deferred;
+`forge plan` is intended to probe the target and later adapter registries and
+conformance contracts will define fail-closed capability checks.
 
-Resolved secret values are forbidden in the environment document. A secret
-reference is opaque to the core and resolved only by the selected secret
-adapter during an authorized operation.
+The target architecture keeps resolved secret values out of environment
+documents and resolves opaque references only during authorized operations.
+The first schema does not yet define secret-reference semantics or detect
+resolved secret values inside arbitrary adapter configuration. That work is
+deferred, so successful validation is not evidence that a document contains
+no secrets or that an environment is safe or deployable.
 
 ## Adapter Boundaries
 
@@ -391,7 +398,7 @@ product data automatically.
 ### Unit and contract tests
 
 - configuration-schema success and failure cases;
-- adapter capability declarations and compatibility checks;
+- later-slice adapter capability declarations and compatibility checks;
 - task-state transition table;
 - idempotent request ingestion by source message identifier and hash;
 - authenticated encryption and redacted error paths;

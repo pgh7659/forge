@@ -81,3 +81,90 @@ def test_validate_reports_schema_issues(capsys) -> None:
     assert captured.out == ""
     assert captured.err.startswith("INVALID 1 issue(s)\n")
     assert "/spec/unexpected:" in captured.err
+
+
+def test_validate_reports_unhashable_yaml_key_as_read_error(
+    tmp_path: Path, capsys
+) -> None:
+    path = tmp_path / "unhashable-key.yaml"
+    path.write_text("? [foo, bar]\n: value\n", encoding="utf-8")
+
+    exit_code = main(["validate", "--config", str(path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 3
+    assert captured.out == ""
+    assert captured.err.startswith(f"READ_ERROR {path}:")
+    assert "cannot parse YAML or JSON" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_validate_rejects_mixed_mapping_keys_before_schema_validation(
+    tmp_path: Path, capsys
+) -> None:
+    path = tmp_path / "mixed-keys.yaml"
+    path.write_text(
+        "apiVersion: forge.dev/v1alpha1\n"
+        "kind: Environment\n"
+        "metadata: {name: mixed-keys}\n"
+        "spec:\n"
+        "  target:\n"
+        "    connectionAdapter: ssh\n"
+        "    runtimeAdapter: systemd\n"
+        "1: value\n"
+        "extra: value\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["validate", "--config", str(path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 4
+    assert captured.out == ""
+    assert captured.err == (
+        "INVALID 1 issue(s)\n"
+        "/1: object keys must be strings for JSON\n"
+    )
+
+
+def test_validate_rejects_recursive_yaml_alias_without_traceback(
+    tmp_path: Path, capsys
+) -> None:
+    path = tmp_path / "recursive-alias.yaml"
+    path.write_text(
+        "apiVersion: forge.dev/v1alpha1\n"
+        "kind: Environment\n"
+        "metadata: {name: recursive-alias}\n"
+        "spec:\n"
+        "  target:\n"
+        "    connectionAdapter: ssh\n"
+        "    runtimeAdapter: systemd\n"
+        "    config:\n"
+        "      loop: &loop [*loop]\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["validate", "--config", str(path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 4
+    assert captured.out == ""
+    assert captured.err == (
+        "INVALID 1 issue(s)\n"
+        "/spec/target/config/loop/0: "
+        "recursive values are not representable as JSON\n"
+    )
+
+
+def test_validate_displays_root_schema_issue_readably(tmp_path: Path, capsys) -> None:
+    path = tmp_path / "root-sequence.yaml"
+    path.write_text("[]\n", encoding="utf-8")
+
+    exit_code = main(["validate", "--config", str(path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 4
+    assert captured.out == ""
+    lines = captured.err.splitlines()
+    assert lines[0] == "INVALID 1 issue(s)"
+    assert lines[1].startswith("<root>:")

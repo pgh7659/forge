@@ -20,6 +20,11 @@ Implemented: installable development package and offline v1alpha1 validation.
 Designed but not implemented: plan, apply, doctor, controller, runtime state,
 and all concrete runtime adapters.
 
+A successful `forge validate` checks YAML/JSON syntax, schema shape, and
+JSON-model compatibility only. It does not prove that selected adapters exist
+or work together, detect resolved secret values inside arbitrary adapter
+configuration, or establish that an environment is safe or deployable.
+
 ## Reference deployments
 
 Concrete stacks are conformance evidence, not platform requirements. The first

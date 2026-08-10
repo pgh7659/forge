@@ -18,6 +18,10 @@
 - Deployment-specific material must remain reviewable under `docs/reference-deployments/hermes-discord-codex/`.
 - The public configuration API version is exactly `forge.dev/v1alpha1` and the document kind is exactly `Environment`.
 - `forge validate` must perform no network or target access.
+- `forge validate` checks YAML/JSON syntax, schema shape, and JSON-model
+  compatibility only. It does not verify adapter existence or combinations,
+  define secret-reference semantics, detect resolved secret values, or prove
+  deployment safety in this slice.
 - The Python package requires Python 3.12 or newer and exposes the console command `forge`.
 - The distribution name is `forge-control`; the import package is `forge`.
 - CLI exit codes are `0` for valid input, `2` for command-line usage, `3` for file or YAML/JSON read errors, and `4` for schema-validation errors.
@@ -1124,11 +1128,12 @@ Designed but not implemented: plan, apply, doctor, controller, runtime state,
 and all concrete runtime adapters.
 ```
 
-Document in `config/README.md` that real environment configuration and secret
-references belong in a private deployment repository after schema
-compatibility is established. Document in `examples/README.md` that examples
-are synthetic inputs and are not evidence of deployed infrastructure. Update
-`tests/README.md` with the exact `make setup` and `make validate` workflow.
+Document in `config/README.md` that real environment configuration belongs in
+a private deployment repository after its syntax and schema shape are checked,
+while adapter compatibility and secret-reference semantics remain deferred.
+Document in `examples/README.md` that examples are synthetic inputs and are not
+evidence of deployed infrastructure. Update `tests/README.md` with the exact
+`make setup` and `make validate` workflow.
 
 - [ ] **Step 5: Run the full validation and package smoke sequence**
 

@@ -19,7 +19,8 @@ def _run_validate(path: Path, stdout: TextIO, stderr: TextIO) -> int:
     except ConfigValidationError as exc:
         print(f"INVALID {len(exc.issues)} issue(s)", file=stderr)
         for issue in exc.issues:
-            print(f"{issue.pointer}: {issue.message}", file=stderr)
+            pointer = issue.pointer or "<root>"
+            print(f"{pointer}: {issue.message}", file=stderr)
         return 4
 
     print(

@@ -134,8 +134,9 @@ workspaces.
   is superseded by Forum routing and the Forge dispatcher.
 - ADR-0005 remains valid for protected checkouts and worktree isolation, but
   Forge rather than Hermes Kanban owns worktree lifecycle.
-- ADR-0006 is superseded for profiles and Kanban. Provider fallback remains a
-  Hermes conversational concern and is independent from Codex session recovery.
+- [ADR-0006](0006-use-hermes-profiles-kanban-and-provider-fallback.md) is
+  superseded for profiles and Kanban. Provider fallback remains a Hermes
+  conversational concern and is independent from Codex session recovery.
 - ADR-0007 applies to the inbox, task ledger, executor, approvals, and results.
 
 ## Consequences

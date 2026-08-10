@@ -30,7 +30,16 @@ def _construct_unique_mapping(
     mapping: dict[object, object] = {}
     for key_node, value_node in node.value:
         key = loader.construct_object(key_node, deep=deep)
-        if key in mapping:
+        try:
+            duplicate = key in mapping
+        except TypeError as exc:
+            raise ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                "unhashable mapping key",
+                key_node.start_mark,
+            ) from exc
+        if duplicate:
             raise ConstructorError(
                 "while constructing a mapping",
                 node.start_mark,
@@ -69,7 +78,7 @@ class ValidatedEnvironment:
 
 def _json_pointer(parts: list[object]) -> str:
     if not parts:
-        return "/"
+        return ""
     encoded = [str(part).replace("~", "~0").replace("/", "~1") for part in parts]
     return "/" + "/".join(encoded)
 
@@ -88,6 +97,7 @@ def _issue_pointer(error: Any) -> str:
 
 def _json_compatibility_issues(document: object) -> tuple[ValidationIssue, ...]:
     issues: list[ValidationIssue] = []
+    active_containers: set[int] = set()
 
     def visit(value: object, parts: list[object]) -> None:
         if value is None or type(value) in (bool, int, str):
@@ -101,20 +111,33 @@ def _json_compatibility_issues(document: object) -> tuple[ValidationIssue, ...]:
                     )
                 )
             return
-        if isinstance(value, list):
-            for index, item in enumerate(value):
-                visit(item, [*parts, index])
-            return
-        if isinstance(value, dict):
-            for key, item in value.items():
-                if not isinstance(key, str):
-                    issues.append(
-                        ValidationIssue(
-                            pointer=_json_pointer([*parts, key]),
-                            message="object keys must be strings for JSON",
-                        )
+        if isinstance(value, (list, dict)):
+            container_id = id(value)
+            if container_id in active_containers:
+                issues.append(
+                    ValidationIssue(
+                        pointer=_json_pointer(parts),
+                        message="recursive values are not representable as JSON",
                     )
-                visit(item, [*parts, key])
+                )
+                return
+            active_containers.add(container_id)
+            try:
+                if isinstance(value, list):
+                    for index, item in enumerate(value):
+                        visit(item, [*parts, index])
+                else:
+                    for key, item in value.items():
+                        if not isinstance(key, str):
+                            issues.append(
+                                ValidationIssue(
+                                    pointer=_json_pointer([*parts, key]),
+                                    message="object keys must be strings for JSON",
+                                )
+                            )
+                        visit(item, [*parts, key])
+            finally:
+                active_containers.remove(container_id)
             return
         issues.append(
             ValidationIssue(
@@ -151,6 +174,10 @@ def load_raw_document(path: Path) -> object:
 
 
 def validate_document(document: object) -> ValidatedEnvironment:
+    compatibility_issues = _json_compatibility_issues(document)
+    if compatibility_issues:
+        raise ConfigValidationError(compatibility_issues)
+
     validator = Draft202012Validator(_schema())
     errors = sorted(
         validator.iter_errors(document),
@@ -168,10 +195,6 @@ def validate_document(document: object) -> ValidatedEnvironment:
             for error in errors
         )
         raise ConfigValidationError(issues)
-
-    compatibility_issues = _json_compatibility_issues(document)
-    if compatibility_issues:
-        raise ConfigValidationError(compatibility_issues)
 
     assert isinstance(document, dict)
     canonical = json.dumps(

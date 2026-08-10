@@ -20,6 +20,7 @@ test:
 
 contracts:
 	./tests/validate-contracts.sh
+	bash tests/test-credential-scan.sh
 
 validate: contracts test
 	$(PYTHON) -m forge.cli validate --config examples/environments/minimal.yaml

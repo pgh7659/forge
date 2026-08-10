@@ -72,7 +72,7 @@ grep -q 'Deployment-specific rules' AGENTS.md
 
 test ! -e prompts/hermes-ops-soul.md
 
-if grep -R -E '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|gh[opurs]_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,})' \
+if grep -R -q -E '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|gh[opurs]_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,})' \
   --exclude-dir=.git \
   --exclude-dir=.venv \
   --exclude-dir=build \
