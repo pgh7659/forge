@@ -6,9 +6,42 @@ from forge.cli import main
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_no_command_prints_help_and_returns_usage_error(capsys) -> None:
+    exit_code = main([])
+    captured = capsys.readouterr()
+
+    assert exit_code == 2
+    assert captured.out.startswith("usage: forge")
+    assert captured.err == ""
+
+
+def test_validate_requires_config(capsys) -> None:
+    exit_code = main(["validate"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 2
+    assert captured.out == ""
+    assert captured.err.startswith("usage: forge validate")
+    assert "the following arguments are required: -f/--config" in captured.err
+
+
 def test_validate_prints_identity_and_digest(capsys) -> None:
     exit_code = main(
         ["validate", "--config", str(ROOT / "examples/environments/minimal.yaml")]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.out.startswith(
+        "VALID example-primary forge.dev/v1alpha1 sha256:"
+    )
+    assert len(captured.out.strip().rsplit(":", 1)[1]) == 64
+    assert captured.err == ""
+
+
+def test_validate_short_config_option_prints_identity_and_digest(capsys) -> None:
+    exit_code = main(
+        ["validate", "-f", str(ROOT / "examples/environments/minimal.yaml")]
     )
     captured = capsys.readouterr()
 
