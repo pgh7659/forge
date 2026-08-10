@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forge.dev/schemas/v1alpha1/plan.json",
+  "title": "Forge Plan v1alpha1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {"const": "forge.dev/v1alpha1"},
+    "kind": {"const": "Plan"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["environment", "planningAdapter", "observation", "operations"],
+      "properties": {
+        "environment": {"$ref": "#/$defs/environment"},
+        "planningAdapter": {"$ref": "#/$defs/planningAdapter"},
+        "observation": {"$ref": "#/$defs/observation"},
+        "operations": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/operation"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "adapterId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "environmentName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "configDigest"],
+      "properties": {
+        "name": {"$ref": "#/$defs/environmentName"},
+        "configDigest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "planningAdapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "connectionAdapter", "runtimeAdapter"],
+      "properties": {
+        "contractVersion": {"const": "forge.dev/planning/v1alpha1"},
+        "connectionAdapter": {"$ref": "#/$defs/adapterId"},
+        "runtimeAdapter": {"$ref": "#/$defs/adapterId"}
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["document", "digest"],
+      "properties": {
+        "document": {"type": "object"},
+        "digest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "action", "resource", "details"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^op-[1-9][0-9]*$"},
+        "action": {"enum": ["create", "update", "replace", "delete"]},
+        "resource": {"$ref": "#/$defs/resource"},
+        "details": {"type": "object"}
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1},
+        "id": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

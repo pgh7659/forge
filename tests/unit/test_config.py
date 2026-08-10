@@ -113,6 +113,29 @@ def test_non_finite_float_is_a_validation_error(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize("value", [9007199254740992, -9007199254740992])
+def test_out_of_range_integer_is_a_validation_error(
+    tmp_path: Path, value: int
+) -> None:
+    path = tmp_path / "out-of-range-integer.yaml"
+    path.write_text(
+        "apiVersion: forge.dev/v1alpha1\nkind: Environment\n"
+        "metadata: {name: out-of-range-integer}\nspec:\n  target:\n"
+        "    connectionAdapter: ssh\n    runtimeAdapter: systemd\n"
+        f"    config: {{value: {value}}}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigValidationError) as raised:
+        load_and_validate(path)
+
+    assert raised.value.issues[0].pointer == "/spec/target/config/value"
+    assert (
+        raised.value.issues[0].message
+        == "integers must be within the I-JSON interoperable range"
+    )
+
+
 def test_non_string_mapping_key_is_a_validation_error(tmp_path: Path) -> None:
     path = tmp_path / "non-string-key.yaml"
     path.write_text(

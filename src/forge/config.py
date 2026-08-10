@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 from dataclasses import dataclass
@@ -12,6 +11,8 @@ import yaml
 from jsonschema import Draft202012Validator
 from yaml.constructor import ConstructorError
 from yaml.nodes import MappingNode
+
+from forge.canonical import sha256_hex
 
 
 class ConfigReadError(Exception):
@@ -100,7 +101,16 @@ def _json_compatibility_issues(document: object) -> tuple[ValidationIssue, ...]:
     active_containers: set[int] = set()
 
     def visit(value: object, parts: list[object]) -> None:
-        if value is None or type(value) in (bool, int, str):
+        if value is None or type(value) in (bool, str):
+            return
+        if type(value) is int:
+            if not -9007199254740991 <= value <= 9007199254740991:
+                issues.append(
+                    ValidationIssue(
+                        pointer=_json_pointer(parts),
+                        message="integers must be within the I-JSON interoperable range",
+                    )
+                )
             return
         if type(value) is float:
             if not math.isfinite(value):
@@ -197,17 +207,10 @@ def validate_document(document: object) -> ValidatedEnvironment:
         raise ConfigValidationError(issues)
 
     assert isinstance(document, dict)
-    canonical = json.dumps(
-        document,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-        allow_nan=False,
-    ).encode("utf-8")
     return ValidatedEnvironment(
         name=document["metadata"]["name"],
         api_version=document["apiVersion"],
-        digest=hashlib.sha256(canonical).hexdigest(),
+        digest=sha256_hex(document),
         document=document,
     )
 
