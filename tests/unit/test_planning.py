@@ -206,3 +206,35 @@ def test_planning_basis_rejects_out_of_range_values_without_leaking_them(
         planning_basis()
 
     assert "9007199254740992" not in str(raised.value)
+
+
+def test_planning_basis_rejects_recursive_observation_with_owned_error() -> None:
+    loop: list[object] = []
+    loop.append(loop)
+
+    with pytest.raises(PlanContractError) as raised:
+        basis(observation={"loop": loop})
+
+    assert "RecursionError" not in str(raised.value)
+
+
+def test_planning_basis_rejects_recursive_operation_details_with_owned_error() -> None:
+    loop: dict[str, object] = {}
+    loop["loop"] = loop
+
+    with pytest.raises(PlanContractError) as raised:
+        basis(operations=(operation(details={"loop": loop}),))
+
+    assert "RecursionError" not in str(raised.value)
+
+
+def test_verify_plan_rejects_recursive_observation_with_owned_error() -> None:
+    document = create_plan(basis()).document()
+    loop: list[object] = []
+    loop.append(loop)
+    document["spec"]["observation"]["document"]["loop"] = loop
+
+    with pytest.raises(PlanContractError) as raised:
+        verify_plan(document)
+
+    assert "RecursionError" not in str(raised.value)

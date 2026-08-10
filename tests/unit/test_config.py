@@ -136,6 +136,82 @@ def test_out_of_range_integer_is_a_validation_error(
     )
 
 
+@pytest.mark.parametrize("surrogate", ["\ud800", "\udfff"])
+def test_direct_document_rejects_lone_surrogate_string(surrogate: str) -> None:
+    document = {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Environment",
+        "metadata": {"name": "surrogate-string"},
+        "spec": {
+            "target": {
+                "connectionAdapter": "noop",
+                "runtimeAdapter": "noop",
+                "config": {"value": surrogate},
+            }
+        },
+    }
+
+    with pytest.raises(ConfigValidationError) as raised:
+        validate_document(document)
+
+    assert raised.value.issues[0].pointer == "/spec/target/config/value"
+    assert (
+        raised.value.issues[0].message
+        == "strings must not contain Unicode surrogate code points"
+    )
+
+
+@pytest.mark.parametrize("escape", ["\\ud800", "\\udfff"])
+def test_file_document_rejects_lone_surrogate_string(
+    tmp_path: Path, escape: str
+) -> None:
+    path = tmp_path / "surrogate-string.yaml"
+    path.write_text(
+        "apiVersion: forge.dev/v1alpha1\n"
+        "kind: Environment\n"
+        "metadata: {name: surrogate-string}\n"
+        "spec:\n"
+        "  target:\n"
+        "    connectionAdapter: noop\n"
+        "    runtimeAdapter: noop\n"
+        f'    config: {{"value": "{escape}"}}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigValidationError) as raised:
+        load_and_validate(path)
+
+    assert raised.value.issues[0].pointer == "/spec/target/config/value"
+    assert (
+        raised.value.issues[0].message
+        == "strings must not contain Unicode surrogate code points"
+    )
+
+
+def test_lone_surrogate_mapping_key_has_a_printable_pointer() -> None:
+    document = {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Environment",
+        "metadata": {"name": "surrogate-key"},
+        "spec": {
+            "target": {
+                "connectionAdapter": "noop",
+                "runtimeAdapter": "noop",
+                "config": {"\ud800": "value"},
+            }
+        },
+    }
+
+    with pytest.raises(ConfigValidationError) as raised:
+        validate_document(document)
+
+    assert raised.value.issues[0].pointer == "/spec/target/config/\\ud800"
+    assert (
+        raised.value.issues[0].message
+        == "object keys must not contain Unicode surrogate code points"
+    )
+
+
 def test_non_string_mapping_key_is_a_validation_error(tmp_path: Path) -> None:
     path = tmp_path / "non-string-key.yaml"
     path.write_text(

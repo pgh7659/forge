@@ -12,7 +12,7 @@ class CanonicalizationError(ValueError):
 def canonical_json_bytes(value: object) -> bytes:
     try:
         return rfc8785.dumps(value)
-    except rfc8785.CanonicalizationError as exc:
+    except (rfc8785.CanonicalizationError, RecursionError, UnicodeError) as exc:
         raise CanonicalizationError("value is not RFC 8785 canonicalizable") from exc
 
 

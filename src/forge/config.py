@@ -80,8 +80,25 @@ class ValidatedEnvironment:
 def _json_pointer(parts: list[object]) -> str:
     if not parts:
         return ""
-    encoded = [str(part).replace("~", "~0").replace("/", "~1") for part in parts]
+    encoded = [
+        _printable_pointer_part(part).replace("~", "~0").replace("/", "~1")
+        for part in parts
+    ]
     return "/" + "/".join(encoded)
+
+
+def _printable_pointer_part(part: object) -> str:
+    value = str(part)
+    return "".join(
+        f"\\u{ord(character):04x}"
+        if 0xD800 <= ord(character) <= 0xDFFF
+        else character
+        for character in value
+    )
+
+
+def _has_surrogate_code_point(value: str) -> bool:
+    return any(0xD800 <= ord(character) <= 0xDFFF for character in value)
 
 
 def _issue_pointer(error: Any) -> str:
@@ -101,7 +118,16 @@ def _json_compatibility_issues(document: object) -> tuple[ValidationIssue, ...]:
     active_containers: set[int] = set()
 
     def visit(value: object, parts: list[object]) -> None:
-        if value is None or type(value) in (bool, str):
+        if value is None or type(value) is bool:
+            return
+        if type(value) is str:
+            if _has_surrogate_code_point(value):
+                issues.append(
+                    ValidationIssue(
+                        pointer=_json_pointer(parts),
+                        message="strings must not contain Unicode surrogate code points",
+                    )
+                )
             return
         if type(value) is int:
             if not -9007199254740991 <= value <= 9007199254740991:
@@ -143,6 +169,16 @@ def _json_compatibility_issues(document: object) -> tuple[ValidationIssue, ...]:
                                 ValidationIssue(
                                     pointer=_json_pointer([*parts, key]),
                                     message="object keys must be strings for JSON",
+                                )
+                            )
+                        elif _has_surrogate_code_point(key):
+                            issues.append(
+                                ValidationIssue(
+                                    pointer=_json_pointer([*parts, key]),
+                                    message=(
+                                        "object keys must not contain Unicode "
+                                        "surrogate code points"
+                                    ),
                                 )
                             )
                         visit(item, [*parts, key])

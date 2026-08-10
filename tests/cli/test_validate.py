@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from forge.cli import main
 
 
@@ -154,6 +156,37 @@ def test_validate_rejects_recursive_yaml_alias_without_traceback(
         "/spec/target/config/loop/0: "
         "recursive values are not representable as JSON\n"
     )
+
+
+@pytest.mark.parametrize("escape", ["\\ud800", "\\udfff"])
+def test_validate_rejects_lone_surrogate_without_traceback(
+    tmp_path: Path, capsys, escape: str
+) -> None:
+    path = tmp_path / "surrogate-string.yaml"
+    path.write_text(
+        "apiVersion: forge.dev/v1alpha1\n"
+        "kind: Environment\n"
+        "metadata: {name: surrogate-string}\n"
+        "spec:\n"
+        "  target:\n"
+        "    connectionAdapter: noop\n"
+        "    runtimeAdapter: noop\n"
+        f'    config: {{"value": "{escape}"}}\n',
+        encoding="utf-8",
+    )
+
+    exit_code = main(["validate", "--config", str(path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 4
+    assert captured.out == ""
+    assert captured.err == (
+        "INVALID 1 issue(s)\n"
+        "/spec/target/config/value: "
+        "strings must not contain Unicode surrogate code points\n"
+    )
+    assert "Traceback" not in captured.err
+    assert "CanonicalizationError" not in captured.err
 
 
 def test_validate_displays_root_schema_issue_readably(tmp_path: Path, capsys) -> None:
