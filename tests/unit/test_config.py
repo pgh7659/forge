@@ -73,3 +73,57 @@ def test_digest_is_independent_of_mapping_order(tmp_path: Path) -> None:
     )
 
     assert load_and_validate(first).digest == load_and_validate(second).digest
+
+
+def test_implicit_yaml_date_is_a_validation_error(tmp_path: Path) -> None:
+    path = tmp_path / "implicit-date.yaml"
+    path.write_text(
+        "apiVersion: forge.dev/v1alpha1\nkind: Environment\n"
+        "metadata: {name: implicit-date}\nspec:\n  target:\n"
+        "    connectionAdapter: ssh\n    runtimeAdapter: systemd\n"
+        "    config: {startDate: 2026-08-10}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigValidationError) as raised:
+        load_and_validate(path)
+
+    assert raised.value.issues[0].pointer == "/spec/target/config/startDate"
+    assert raised.value.issues[0].message == "value is not representable as JSON"
+
+
+def test_non_finite_float_is_a_validation_error(tmp_path: Path) -> None:
+    path = tmp_path / "non-finite-float.yaml"
+    path.write_text(
+        "apiVersion: forge.dev/v1alpha1\nkind: Environment\n"
+        "metadata: {name: non-finite-float}\nspec:\n  target:\n"
+        "    connectionAdapter: ssh\n    runtimeAdapter: systemd\n"
+        "    config: {ratio: .nan}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigValidationError) as raised:
+        load_and_validate(path)
+
+    assert raised.value.issues[0].pointer == "/spec/target/config/ratio"
+    assert (
+        raised.value.issues[0].message
+        == "non-finite floats are not representable as JSON"
+    )
+
+
+def test_non_string_mapping_key_is_a_validation_error(tmp_path: Path) -> None:
+    path = tmp_path / "non-string-key.yaml"
+    path.write_text(
+        "apiVersion: forge.dev/v1alpha1\nkind: Environment\n"
+        "metadata: {name: non-string-key}\nspec:\n  target:\n"
+        "    connectionAdapter: ssh\n    runtimeAdapter: systemd\n"
+        "    config: {1: value}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigValidationError) as raised:
+        load_and_validate(path)
+
+    assert raised.value.issues[0].pointer == "/spec/target/config/1"
+    assert raised.value.issues[0].message == "object keys must be strings for JSON"

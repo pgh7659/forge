@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
@@ -85,6 +86,47 @@ def _issue_pointer(error: Any) -> str:
     return _json_pointer(parts)
 
 
+def _json_compatibility_issues(document: object) -> tuple[ValidationIssue, ...]:
+    issues: list[ValidationIssue] = []
+
+    def visit(value: object, parts: list[object]) -> None:
+        if value is None or type(value) in (bool, int, str):
+            return
+        if type(value) is float:
+            if not math.isfinite(value):
+                issues.append(
+                    ValidationIssue(
+                        pointer=_json_pointer(parts),
+                        message="non-finite floats are not representable as JSON",
+                    )
+                )
+            return
+        if isinstance(value, list):
+            for index, item in enumerate(value):
+                visit(item, [*parts, index])
+            return
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    issues.append(
+                        ValidationIssue(
+                            pointer=_json_pointer([*parts, key]),
+                            message="object keys must be strings for JSON",
+                        )
+                    )
+                visit(item, [*parts, key])
+            return
+        issues.append(
+            ValidationIssue(
+                pointer=_json_pointer(parts),
+                message="value is not representable as JSON",
+            )
+        )
+
+    visit(document, [])
+    return tuple(sorted(issues, key=lambda issue: (issue.pointer, issue.message)))
+
+
 def _schema() -> dict[str, Any]:
     resource = files("forge").joinpath(
         "resources/schemas/environment-v1alpha1.schema.json"
@@ -127,12 +169,17 @@ def validate_document(document: object) -> ValidatedEnvironment:
         )
         raise ConfigValidationError(issues)
 
+    compatibility_issues = _json_compatibility_issues(document)
+    if compatibility_issues:
+        raise ConfigValidationError(compatibility_issues)
+
     assert isinstance(document, dict)
     canonical = json.dumps(
         document,
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,
+        allow_nan=False,
     ).encode("utf-8")
     return ValidatedEnvironment(
         name=document["metadata"]["name"],
