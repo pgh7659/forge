@@ -33,11 +33,13 @@ examples/environments/noop.yaml` performs no target access or mutation.
 `ssh+systemd` is schema-valid but planning-unavailable until a later reviewed
 real-adapter slice; no adapter alias, fallback, or provider default exists.
 
-Validation and planning do not verify adapter availability or compatibility,
-resolve secret references, detect resolved secret values in arbitrary adapter
-configuration, or prove runtime or deployment safety. A Plan is private
-review/audit data by default, not evidence of deployability, safety, secret
-absence, or real target observation.
+Validation does not verify whether an adapter pair is registered. Planning
+verifies only the exact in-process registry lookup and that the selected
+adapter produces a valid Plan artifact; it does not verify target reachability,
+real compatibility, safety, or deployability. Neither command resolves secret
+references or detects resolved secret values in arbitrary adapter
+configuration. A Plan is private review/audit data by default, not evidence of
+deployability, safety, secret absence, or real target observation.
 
 Apply, doctor, controller/state, real adapters, `forge-ops`, OCI
 reconciliation, merge, and deployment are unimplemented or separately
