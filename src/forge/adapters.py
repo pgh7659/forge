@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from types import MappingProxyType
-from typing import Protocol
+from typing import NoReturn, Protocol
 
 from forge.canonical import CanonicalizationError, canonical_json_bytes
 from forge.config import ValidatedEnvironment
@@ -16,6 +16,7 @@ _UNAVAILABLE_REASONS = frozenset(
         "invalid adapter result",
     }
 )
+_ADAPTER_AVAILABILITY_MISUSE = "adapter emitted an invalid availability signal"
 
 
 class PlanningAdapter(Protocol):
@@ -69,6 +70,14 @@ def default_planning_registry() -> PlanningRegistry:
     return PlanningRegistry(((AdapterKey("noop", "noop"), NoopPlanningAdapter()),))
 
 
+def _raise_normalized_adapter_unavailability(
+    adapter_key: AdapterKey, unavailable: PlanningUnavailable
+) -> NoReturn:
+    if unavailable.reason == "observation unavailable":
+        raise PlanningUnavailable(adapter_key, "observation unavailable") from None
+    raise RuntimeError(_ADAPTER_AVAILABILITY_MISUSE) from None
+
+
 def plan_environment(
     environment: ValidatedEnvironment, registry: PlanningRegistry
 ) -> PlanArtifact:
@@ -80,9 +89,7 @@ def plan_environment(
     try:
         observation = adapter.observe(environment)
     except PlanningUnavailable as exc:
-        if exc.reason == "observation unavailable":
-            raise PlanningUnavailable(adapter_key, "observation unavailable") from None
-        raise
+        _raise_normalized_adapter_unavailability(adapter_key, exc)
 
     if type(observation) is not dict:
         raise PlanningUnavailable(adapter_key, "invalid adapter result")
@@ -91,7 +98,10 @@ def plan_environment(
     except CanonicalizationError:
         raise PlanningUnavailable(adapter_key, "invalid adapter result") from None
 
-    operations = adapter.plan(environment, observation)
+    try:
+        operations = adapter.plan(environment, observation)
+    except PlanningUnavailable as exc:
+        _raise_normalized_adapter_unavailability(adapter_key, exc)
     if type(operations) is not tuple or any(
         type(operation) is not dict for operation in operations
     ):

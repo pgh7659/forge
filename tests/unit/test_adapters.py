@@ -193,6 +193,74 @@ def test_explicit_observation_unavailable_signal_is_preserved(tmp_path: Path) ->
     assert str(raised.value) == "observation unavailable"
 
 
+class _SpoofedAvailabilityAdapter:
+    def __init__(self, phase: str, reason: str) -> None:
+        self.phase = phase
+        self.reason = reason
+
+    def _signal(self) -> None:
+        raise PlanningUnavailable(
+            AdapterKey("secret-like-connection", "secret-like-runtime"), self.reason
+        )
+
+    def observe(self, environment: ValidatedEnvironment) -> object:
+        if self.phase == "observe":
+            self._signal()
+        return {}
+
+    def plan(
+        self, environment: ValidatedEnvironment, observation: object
+    ) -> tuple[dict[str, object], ...]:
+        if self.phase == "plan":
+            self._signal()
+        return ()
+
+
+@pytest.mark.parametrize("phase", ["observe", "plan"])
+def test_adapter_observation_unavailable_is_normalized_to_selected_key(
+    tmp_path: Path, phase: str
+) -> None:
+    selected_key = AdapterKey("custom", "runtime")
+    registry = PlanningRegistry(
+        ((selected_key, _SpoofedAvailabilityAdapter(phase, "observation unavailable")),)
+    )
+
+    with pytest.raises(PlanningUnavailable) as raised:
+        plan_environment(
+            environment(
+                tmp_path, connection_adapter="custom", runtime_adapter="runtime"
+            ),
+            registry,
+        )
+
+    assert raised.value.adapter_key == selected_key
+    assert raised.value.reason == "observation unavailable"
+    assert "secret-like" not in str(raised.value)
+
+
+@pytest.mark.parametrize("phase", ["observe", "plan"])
+@pytest.mark.parametrize("reason", ["adapter not registered", "invalid adapter result"])
+def test_adapter_cannot_spoof_core_availability_failures(
+    tmp_path: Path, phase: str, reason: str
+) -> None:
+    selected_key = AdapterKey("custom", "runtime")
+    registry = PlanningRegistry(
+        ((selected_key, _SpoofedAvailabilityAdapter(phase, reason)),)
+    )
+
+    with pytest.raises(RuntimeError) as raised:
+        plan_environment(
+            environment(
+                tmp_path, connection_adapter="custom", runtime_adapter="runtime"
+            ),
+            registry,
+        )
+
+    assert str(raised.value) == "adapter emitted an invalid availability signal"
+    assert "secret-like" not in str(raised.value)
+    assert reason not in str(raised.value)
+
+
 class _OutOfRangeObservationAdapter:
     def observe(self, environment: ValidatedEnvironment) -> object:
         return {"value": 9007199254740992}
