@@ -26,6 +26,9 @@ venv/
 .pytest_cache/
 .coverage
 htmlcov/
+.eggs/
+*.egg-info/
+wheel-smoke/
 
 # Node
 node_modules/
