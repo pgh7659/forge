@@ -107,6 +107,23 @@ surface the uncertainty.
 -   Never document or implement a public-internet dashboard exposure path as
     the default.
 
+### Assistant and Engineering Execution
+
+-   Hermes owns the personal-assistant and control-plane responsibilities:
+    request capture, factual status, reminders, registered operations,
+    approvals, and task dispatch.
+-   Preserve the operator's raw request. Enrichment may append resolved facts,
+    but must not silently replace the original request before dispatch.
+-   Route ambiguous product, architecture, roadmap, or interactive engineering
+    work to direct Codex instead of manufacturing acceptance criteria.
+-   Codex is the first engineering executor. It operates only in a task-local
+    worktree and returns reviewable Git and validation evidence.
+-   Cross-device continuation uses pushed refs, Draft PRs, and explicit handoff
+    records. Do not claim private session continuity across runtimes.
+-   No two executors may own the same task branch concurrently.
+-   Merge, deployment, migration, credential use, publication, and destructive
+    operations require scoped human approval.
+
 ### Version and Capability Verification
 
 -   Treat Hermes documentation and CLI behavior as versioned dependencies.

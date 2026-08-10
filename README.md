@@ -40,9 +40,11 @@ The current direction, intentionally, is:
 
 - OCI Ubuntu ARM64 as the first host
 - Hermes installed directly on the host for the first deployment
-- Discord as the primary operator interface
+- Discord and Hermes as the personal-assistant and operations control plane
 - Tailscale-only access for the Hermes dashboard
-- Hermes profiles plus Kanban for multi-agent execution
+- Hermes Kanban for durable task state and approval routing
+- direct Codex for product, architecture, and interactive engineering decisions
+- Codex CLI as the first version-verified engineering executor
 - protected Git checkouts plus Hermes-native task worktrees for code isolation
 - provider fallback for resilience before custom multi-CLI handoff logic
 
@@ -78,9 +80,13 @@ If you are new to the repository, read in this order:
 - `tests/` will hold validation for contracts, safety rules, and workflows.
 - `examples/` will hold small, inspectable scenarios.
 
+Host-specific inventory and audit evidence belong in a separate private
+operations repository. Secrets remain outside Git entirely.
+
 ## Current status
 
-Forge is in the documentation and contract phase.
+Forge is moving from documentation and contracts into reconciliation with its
+first manually configured OCI host.
 
 Implemented today:
 
@@ -88,9 +94,16 @@ Implemented today:
 - architecture and roadmap
 - initial ADRs
 - runtime-neutral security contracts and threat model documentation
+- assistant-control-plane and engineering-executor responsibility contract
+- read-only OCI audit and task-handoff templates
 - repository scaffold
 
-Not implemented yet:
+Reported outside this repository but not yet accepted as verified Forge
+capability:
+
+- OCI-hosted Hermes, Discord, and Codex CLI operation
+
+Not implemented or not yet evidenced in this repository:
 
 - OCI bootstrap scripts
 - Hermes installation automation
@@ -99,9 +112,10 @@ Not implemented yet:
 - repository and worktree automation
 - backup and observability workflows
 
-No document in this repository should be read as evidence that an OCI host is
-already configured. Until the relevant phase is implemented and its acceptance
-checks pass, it is a chosen design rather than an operating capability.
+The operator reports that an OCI host is configured, but its version, service,
+workspace, access, backup, and recovery evidence has not been reconciled with
+this repository. Until the read-only audit and acceptance checks pass, treat
+that host as observed external state rather than a reproducible Forge release.
 
 ## Security
 
@@ -113,18 +127,21 @@ host enforcement are proposed work, not current runtime capabilities.
 
 ## Validated design stance
 
-The first deployment deliberately uses Hermes features before adding Forge
-abstractions:
+The first deployment deliberately uses Hermes features for the assistant
+control plane before adding Forge abstractions:
 
-- one Discord-connected orchestrator gateway
-- named Hermes profiles as workers
+- one Discord-connected assistant gateway
+- an optional operations profile for registered runbooks
 - Kanban boards and the gateway-embedded dispatcher
 - native `worktree` workspaces for coding tasks
 - Hermes provider fallback for API-level resilience
+- a version-verified Codex adapter for engineering execution
 
-External coding CLIs remain optional tools. Forge does not assume that a
-Claude Code, Gemini CLI, or Codex CLI session can transparently continue
-another CLI's interrupted session.
+Codex is the first engineering executor, not the Forge platform identity.
+Forge does not assume that Hermes, direct Codex, Codex CLI, Claude Code, or
+Gemini CLI can transparently continue another runtime's private session.
+Durable continuation uses Git refs, Draft PRs, validation evidence, and an
+explicit handoff record.
 
 ## Working stance
 
@@ -137,8 +154,7 @@ Before adding code, scripts, or services, define:
 - how it is rolled back
 - what documentation must move with it
 
-The first useful milestone is deliberately smaller than the long-term vision:
-one OCI host, one trusted operator, one Discord-connected orchestrator, one
-Kanban board, and one test repository. Multi-project and multi-agent expansion
-follows only after this vertical slice survives restart, recovery, and access
-control tests.
+The next useful milestone is deliberately smaller than the long-term vision:
+audit the existing OCI host, run one trusted Discord assistant, dispatch one
+accepted task through Codex into an isolated worktree and Draft PR, and prove
+restart, recovery, access control, and handoff to a second device.

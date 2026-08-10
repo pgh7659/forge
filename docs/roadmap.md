@@ -15,7 +15,9 @@ Each phase should leave behind:
 
 ## Current Status
 
-Repository foundation is in progress.
+Repository foundation is in progress. The operator reports an active OCI host
+with Hermes, Discord, and Codex CLI, but that deployment has not yet passed the
+repository's audit and acceptance contract.
 
 The direction is now explicit:
 
@@ -24,6 +26,9 @@ The direction is now explicit:
 -   first operator interface: Discord
 -   first private access layer: Tailscale
 -   first workspace model: protected checkout plus Hermes-native worktree
+-   assistant control plane: Hermes and Discord
+-   engineering decision surface: direct Codex
+-   first engineering executor: version-verified Codex CLI adapter
 -   security baseline: runtime-neutral trust, taint, provenance, policy, and
     sink contracts, with enforcement deferred to tested adapters
 
@@ -57,7 +62,7 @@ Goals:
 Deliverables:
 
 -   environment audit script
--   environment audit report
+-   private environment audit report
 -   explicit bootstrap prerequisites
 -   installed-tool and architecture compatibility matrix
 -   current OCI NSG/security-list and host-firewall inventory
@@ -98,7 +103,7 @@ Goals:
 -   validate provider setup
 -   document the real install layout and service boundaries
 -   record the installed Hermes version or source commit
--   begin with a single default/orchestrator profile and a non-sensitive test
+-   begin with a single assistant profile and a non-sensitive test
     repository
 
 Expected scope:
@@ -173,14 +178,15 @@ Goals:
 
 Expected profiles after the single-profile vertical slice succeeds:
 
--   orchestrator
--   coder
--   reviewer
+-   assistant
+-   optional ops
 
 Exit criteria:
 
 -   a task can be created, assigned, run, and completed through Hermes Kanban
 -   role boundaries are documented
+-   ambiguous design work is routed to direct Codex
+-   implementation dispatch preserves the operator's raw request
 -   concurrency limits are conservative and explicit
 -   automatic triage decomposition remains off until manually reviewed task
     flow is stable
@@ -198,6 +204,8 @@ Goals:
 Expected scope:
 
 -   repository registration
+-   request-driven repository and worklog collection
+-   incremental cursors for explicitly scheduled briefs
 -   protected checkout setup
 -   Hermes-native worktree creation
 -   worktree cleanup checks
@@ -206,27 +214,36 @@ Expected scope:
 Exit criteria:
 
 -   active tasks run only in isolated worktrees
+-   scheduled collection has a documented operator need, bounded query window,
+    retention, and failure signal
 -   project checkouts are protected from task edits
 -   cleanup does not destroy unreviewed work
 
-## Phase 8 - Provider Resilience and Specialist Tools
+## Phase 8 - Codex Executor and Provider Resilience
 
 Goals:
 
 -   configure Hermes provider fallback
--   define when external specialist CLIs are used
--   avoid inventing fragile cross-CLI orchestration too early
+-   record the installed OCI Codex version and command contract
+-   implement the task-envelope and structured-result adapter
+-   implement Codex session and GitHub handoff state
+-   configure Hermes provider fallback without treating it as Codex session
+    failover
 
 Expected scope:
 
 -   fallback provider policy
--   role-based provider aliases
--   documented optional use of Codex CLI, Claude Code, and Gemini CLI
+-   version-verified Codex non-interactive execution and resume behavior
+-   branch, Draft PR, validation, and approval result contract
+-   optional adapters for other CLIs only after the Codex path is stable
 
 Exit criteria:
 
 -   provider failures degrade gracefully
--   Forge relies on Hermes-native resilience before custom handoff logic
+-   Hermes provider failure and Codex executor-session failure have distinct,
+    observable recovery paths
+-   one accepted task can be dispatched to Codex in a worktree and handed to a
+    direct Codex session through GitHub without directory synchronization
 
 ## Phase 9 - Backups, Health Checks, and Recovery
 
@@ -262,10 +279,12 @@ end-to-end task through this path:
 ```text
 Discord request
   -> Hermes gateway
-  -> manually reviewed Kanban task
+  -> assistant classification and raw-request capture
+  -> manually reviewed Kanban task envelope
   -> one task worktree
-  -> test change and validation
-  -> Git commit or explicit discard
+  -> Codex implementation and validation
+  -> pushed Git checkpoint and Draft PR
+  -> optional handoff to direct Codex on another device
   -> Discord completion report
 ```
 

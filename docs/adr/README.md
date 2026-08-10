@@ -18,3 +18,5 @@ rule.
 -   `0006-use-hermes-profiles-kanban-and-provider-fallback.md`
 -   `0007-adopt-runtime-neutral-security-contracts.md` - trust, taint,
     provenance, policy-decision, and sink contracts
+-   `0008-separate-assistant-control-plane-from-engineering-execution.md` -
+    Hermes assistant control plane, Codex executor, and Git-based handoff

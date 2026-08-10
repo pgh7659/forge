@@ -1,0 +1,49 @@
+{
+  "contract_version": "forge.task/v1alpha1",
+  "task_id": "example-task-id",
+  "source": {
+    "kind": "discord-thread",
+    "reference": "opaque-private-reference"
+  },
+  "classification": "implement",
+  "raw_request": "Preserve the operator request verbatim in private task state.",
+  "repository": {
+    "full_name": "owner/repository",
+    "base_ref": "main",
+    "base_commit": "resolved-full-commit-sha",
+    "task_branch": "feat/example-task"
+  },
+  "workspace": {
+    "kind": "worktree",
+    "owner": "oci"
+  },
+  "acceptance_criteria": [
+    "Replace this example with reviewed, testable criteria."
+  ],
+  "validation_commands": [],
+  "allowed_actions": [
+    "read",
+    "edit-worktree",
+    "test",
+    "commit",
+    "push-task-branch",
+    "create-draft-pr"
+  ],
+  "approval_required": [
+    "merge",
+    "deploy",
+    "migration",
+    "destructive-action",
+    "credential-use"
+  ],
+  "executor": {
+    "kind": "codex-cli",
+    "session_id": null
+  },
+  "handoff": {
+    "last_pushed_commit": null,
+    "pull_request": null,
+    "status": "ready",
+    "blockers": []
+  }
+}

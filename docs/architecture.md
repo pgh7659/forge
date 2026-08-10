@@ -36,9 +36,16 @@ Implemented today:
 -   architecture and roadmap
 -   ADR scaffolding
 -   runtime-neutral security contract and threat model documentation
+-   assistant-control-plane and engineering-executor responsibility contract
+-   read-only OCI audit and Git-based handoff templates
 -   repository scaffolding for future bootstrap, config, scripts, and tests
 
-Not implemented yet:
+Reported by the operator but not yet reconciled through Forge acceptance
+evidence:
+
+-   OCI-hosted Hermes, Discord, and Codex CLI operation
+
+Not implemented or not yet evidenced in this repository:
 
 -   OCI bootstrap scripts
 -   Hermes installation automation
@@ -49,8 +56,10 @@ Not implemented yet:
 -   security contract schemas, validators, policy evaluation, runtime adapters,
     and host enforcement
 
-The rest of this document describes the target architecture for the first OCI
-deployment, not a claim that the runtime already exists.
+The rest of this document describes the chosen architecture and reconciliation
+target. It is not evidence that the reported OCI runtime is reproducible,
+recoverable, or compliant until the environment audit and acceptance contract
+pass.
 
 ## Direction Check
 
@@ -70,6 +79,9 @@ The architecture aligns with Hermes' current operating model:
     rather than exposing the dashboard to the public internet.
 -   Hermes Discord integration is first-class and supports allowlists,
     mentions, threads, files, and slash commands.
+-   Codex CLI supports non-interactive execution and resumable task sessions in
+    the currently inspected client, but the OCI-installed version and help
+    output must be captured before its adapter is automated.
 
 Because of that, Forge does not need to invent a custom orchestration model to
 reach a useful OCI deployment.
@@ -82,10 +94,11 @@ initial runtime through Hermes.
 That deployment includes:
 
 -   Hermes installed directly on the host
--   Discord as the primary operator interface
+-   Discord and Hermes as the personal-assistant and operations interface
 -   Hermes dashboard reachable only on the Tailnet
--   Hermes profiles for role separation
--   Hermes Kanban for multi-agent task flow
+-   an assistant profile and an optional operations profile
+-   Hermes Kanban for durable task, approval, and handoff state
+-   Codex as the first engineering executor
 -   protected Git checkouts plus Hermes-native Git worktrees for code isolation
 -   provider fallback for model resilience
 
@@ -93,13 +106,13 @@ The first production-like validation slice is intentionally narrower:
 
 -   one trusted Unix service account
 -   one trusted Discord operator
--   one orchestrator profile
+-   one assistant profile
 -   one Kanban board with automatic decomposition disabled
 -   one non-sensitive test repository
--   one coding worker at a time
+-   one Codex engineering executor at a time
 
-Coder and reviewer profiles are added only after this slice passes restart,
-authorization, workspace-isolation, and recovery checks.
+The optional operations and reviewer profiles are added only after this slice
+passes restart, authorization, workspace-isolation, and recovery checks.
 
 It explicitly does not require, on day one:
 
@@ -116,13 +129,12 @@ choices.
 
 ```text
 Human Operator
-  -> Interface Layer
-  -> Forge Policy and Workflow
-  -> Hermes Runtime
-  -> Agent Profiles and Kanban
-  -> Workspace Manager
-  -> Git Repositories and Worktrees
-  -> Host Services and Network Boundary
+  -> Direct Codex Decision Surface | Discord Assistant Surface
+  -> Forge Policy, Task Contract, and Approval Boundary
+  -> Hermes Assistant Control Plane
+  -> Codex Engineering Executor
+  -> Workspace Manager and GitHub Handoff
+  -> Protected Runtime and Data Plane
 ```
 
 ## Layer Responsibilities
@@ -137,7 +149,8 @@ Receives work and returns results.
 
 First chosen interfaces:
 
--   Discord for day-to-day interaction
+-   direct Codex for product, architecture, roadmap, and interactive engineering
+-   Discord for personal assistance, operations, task capture, and reporting
 -   Hermes dashboard for observability and operator control
 
 ### Forge Policy and Workflow
@@ -153,30 +166,35 @@ This layer is where Forge keeps its identity independent from Hermes.
 
 ### Hermes Runtime
 
-Hermes is the initial runtime implementation for:
+Hermes is the initial assistant control-plane runtime for:
 
--   agent execution
 -   messaging gateway
 -   dashboard
 -   profile management
 -   provider fallback
--   Kanban task dispatch
+-   Kanban task, approval, and dispatch state
+-   reminders, scheduled reports, factual status, and registered runbooks
 
-Forge uses Hermes because it already provides the execution surfaces the first
-deployment needs.
+Hermes must preserve the operator's raw request and must route ambiguous design
+work to direct Codex rather than silently inventing an engineering contract.
 
-### Agent Profiles and Kanban
+Status collection is on-demand by default. When a daily brief is useful, the
+collector advances an incremental cursor and caches only the bounded state
+needed for the report. OCI utilization is an observation, not a reason to run
+full-history scans or invent background work.
+
+### Assistant Profiles and Kanban
 
 Initial operating model:
 
--   `orchestrator`
--   `coder`
--   `reviewer`
+-   `assistant`: the only Discord-connected gateway; owns capture, status,
+    reminders, approvals, and dispatch
+-   `ops`: optional worker for registered read-only or reversible runbooks
 
 Optional later:
 
--   `researcher`
--   `infra`
+-   `reviewer`: independent read-only verification
+-   other named specialists justified by observed demand
 
 Kanban is the task coordination plane and remains single-host for the first
 deployment. The dispatcher runs inside the gateway by default. A single
@@ -185,16 +203,32 @@ workspace area, and logs per board. Forge should begin with one board per
 active project or operational domain rather than mixing unrelated projects in
 the default board.
 
-Only the orchestrator profile needs the Discord-connected gateway initially.
-Coder and reviewer profiles are dispatcher-spawned workers; giving every
-profile its own bot token and gateway would add operational complexity without
-improving the first workflow.
+Only the assistant profile needs the Discord-connected gateway. Codex is
+invoked through a version-verified executor adapter rather than represented as
+a Hermes coding personality. Giving every profile its own bot token and gateway
+would add operational complexity without improving the workflow.
 
 Profiles isolate Hermes state through `HERMES_HOME`; they do not automatically
 isolate the host user's SSH keys, GitHub credentials, external CLI sessions, or
 filesystem permissions. The initial profiles therefore share one trust domain.
 Stronger identity separation requires separate Unix users, containers, or a
 later isolation design.
+
+### Codex Engineering Executor
+
+Codex is the first implementation executor for accepted engineering tasks. The
+adapter may start or resume a Codex CLI session only after the installed OCI
+version and command contract have been captured. It receives the operator's raw
+request plus a versioned task envelope and runs in the task-local worktree.
+
+The adapter returns structured status, validation evidence, the last pushed
+commit, Draft PR, risks, blockers, and any action requiring approval. It does
+not merge, deploy, migrate, publish, use credentials outside the declared
+scope, or perform destructive cleanup without fresh human approval.
+
+Direct Codex and OCI Codex sessions do not share hidden conversation state.
+Handoff across devices or runtimes uses pushed Git refs, Draft PRs, and the
+procedure in `docs/operations/assistant-codex-handoff.md`.
 
 ### Workspace Manager
 
@@ -276,6 +310,14 @@ Target layout:
 `repos/` contains protected project checkouts. Each checkout is the anchor for
 the task worktrees Hermes creates below `.worktrees/`.
 
+This public Forge repository owns reusable templates, contracts, scripts, and
+runbooks. Host-specific inventory, repository registrations, opaque service
+identifiers, audit reports, and accepted version locks belong in a separate
+private operations repository mounted or checked out at `/srv/forge/ops`.
+Credentials remain outside both repositories in a host or external secret
+store. Introducing the private operations repository is a deployment action and
+requires explicit approval.
+
 The checkout is operational state, not the source of truth: pushed Git refs
 remain authoritative. Uncommitted or unpushed worktrees must be detected by
 health checks and backup policy because GitHub cannot restore them.
@@ -296,6 +338,11 @@ Discord is the first operator interface because it fits:
 -   file delivery
 -   mention-gated channel interaction
 -   fine-grained allowlists
+
+Discord is the primary assistant and operations interface, not the sole surface
+for product strategy or interactive engineering. Design requests are recorded
+and routed to direct Codex; implementation requests preserve the raw Discord
+message in private task state.
 
 Default security stance:
 
@@ -361,8 +408,10 @@ Provider fallback preserves the Hermes conversation when an API provider hits
 a rate limit, authentication failure, overload, or connection error. It does
 not preserve the private session state of an external coding CLI.
 
-Optional specialist CLIs such as Codex CLI, Claude Code, and Gemini CLI are
-secondary tools, not the primary orchestration fabric.
+Codex CLI is the first engineering executor beneath the Forge task contract.
+It is not the primary orchestration fabric: Hermes and Kanban own durable task
+state, while GitHub owns durable engineering handoff. Other CLIs remain optional
+adapters.
 
 That means Forge should avoid assuming:
 

@@ -1,6 +1,9 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help
+.PHONY: help validate
 help:
 	@printf '%s\n' 'Forge bootstrap repository'
-	@printf '%s\n' 'No automation targets are defined yet.'
+	@printf '%s\n' 'make validate  Validate public contracts and scripts.'
+
+validate:
+	@./tests/validate-contracts.sh

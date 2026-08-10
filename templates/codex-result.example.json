@@ -1,0 +1,28 @@
+{
+  "contract_version": "forge.result/v1alpha1",
+  "task_id": "example-task-id",
+  "status": "needs_review",
+  "summary": "Describe only work supported by the executor evidence.",
+  "repository": {
+    "full_name": "owner/repository",
+    "task_branch": "feat/example-task",
+    "last_pushed_commit": "resolved-full-commit-sha",
+    "pull_request": "opaque-or-public-pr-reference"
+  },
+  "changed_files": [],
+  "validation": [
+    {
+      "command": "project-defined validation command",
+      "status": "passed",
+      "evidence_reference": "private-log-reference"
+    }
+  ],
+  "risks": [],
+  "blockers": [],
+  "approval_requests": [],
+  "remaining_work": [],
+  "executor": {
+    "kind": "codex-cli",
+    "session_id": "private-session-reference"
+  }
+}
