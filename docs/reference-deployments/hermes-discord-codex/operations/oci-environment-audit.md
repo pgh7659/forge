@@ -12,10 +12,10 @@ bodies, session contents, or repository source files.
 
 ## Run
 
-From the OCI operator account:
+From the repository root as the OCI operator account:
 
 ```sh
-FORGE_ROOT=/srv/forge ../scripts/audit-oci-host.sh > forge-oci-audit.txt
+FORGE_ROOT=/srv/forge ./docs/reference-deployments/hermes-discord-codex/scripts/audit-oci-host.sh > forge-oci-audit.txt
 chmod 0600 forge-oci-audit.txt
 ```
 
@@ -47,7 +47,8 @@ The audit is accepted when:
   accounted for;
 - public listeners and privileged credentials have explicit owners;
 - dirty or unpushed worktrees are preserved;
-- observed state is reconciled with `../../../architecture.md` and the roadmap; and
+- observed state is reconciled with the [reference architecture](../architecture.md)
+  and [reference roadmap](../roadmap.md); and
 - no public artifact contains the private report.
 
 ## Rollback

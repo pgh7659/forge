@@ -115,10 +115,11 @@ After restarting `tailscaled`, confirm that the expected persistent routes
 return in `tailscale serve status`. Do not run `tailscale up --force-reauth`
 remotely unless an independent console path is available.
 
-Validate the tracked Caddy compatibility configuration before installing it:
+From the repository root, validate the tracked Caddy compatibility
+configuration before installing it:
 
 ```sh
-caddy validate --config ../assets/caddy/Caddyfile.tailnet
+caddy validate --config docs/reference-deployments/hermes-discord-codex/assets/caddy/Caddyfile.tailnet
 ```
 
 The template must remain loopback-only and normalize the upstream Host header

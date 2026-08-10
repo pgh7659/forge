@@ -20,6 +20,9 @@ procedures. They are not evidence that any live host is reconciled, secure, or
 currently conforms. Version-dependent commands require verification against the
 installed implementation before use.
 
+The deployment's detailed [architecture](architecture.md) and
+[roadmap](roadmap.md) are retained here as reviewable reference material.
+
 ## Operations
 
 [Operations runbooks](operations/) describe the selected deployment's audit,
