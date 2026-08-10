@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from dataclasses import dataclass
@@ -12,7 +13,7 @@ from jsonschema import Draft202012Validator
 from yaml.constructor import ConstructorError
 from yaml.nodes import MappingNode
 
-from forge.canonical import sha256_hex
+from forge.canonical import CanonicalizationError, canonical_json_bytes
 
 
 class ConfigReadError(Exception):
@@ -69,12 +70,33 @@ class ConfigValidationError(Exception):
         super().__init__(f"environment has {len(issues)} validation issue(s)")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class ValidatedEnvironment:
-    name: str
-    api_version: str
-    digest: str
-    document: dict[str, Any]
+    _canonical_bytes: bytes
+
+    @property
+    def name(self) -> str:
+        return self.document["metadata"]["name"]
+
+    @property
+    def api_version(self) -> str:
+        return self.document["apiVersion"]
+
+    @property
+    def digest(self) -> str:
+        return hashlib.sha256(self._canonical_bytes).hexdigest()
+
+    @property
+    def document(self) -> dict[str, Any]:
+        value = json.loads(self._canonical_bytes)
+        assert isinstance(value, dict)
+        return value
+
+
+def _validated_environment(canonical_bytes: bytes) -> ValidatedEnvironment:
+    environment = object.__new__(ValidatedEnvironment)
+    object.__setattr__(environment, "_canonical_bytes", canonical_bytes)
+    return environment
 
 
 def _json_pointer(parts: list[object]) -> str:
@@ -147,7 +169,7 @@ def _json_compatibility_issues(document: object) -> tuple[ValidationIssue, ...]:
                     )
                 )
             return
-        if isinstance(value, (list, dict)):
+        if type(value) is list or type(value) is dict:
             container_id = id(value)
             if container_id in active_containers:
                 issues.append(
@@ -159,12 +181,12 @@ def _json_compatibility_issues(document: object) -> tuple[ValidationIssue, ...]:
                 return
             active_containers.add(container_id)
             try:
-                if isinstance(value, list):
+                if type(value) is list:
                     for index, item in enumerate(value):
                         visit(item, [*parts, index])
                 else:
                     for key, item in value.items():
-                        if not isinstance(key, str):
+                        if type(key) is not str:
                             issues.append(
                                 ValidationIssue(
                                     pointer=_json_pointer([*parts, key]),
@@ -243,12 +265,18 @@ def validate_document(document: object) -> ValidatedEnvironment:
         raise ConfigValidationError(issues)
 
     assert isinstance(document, dict)
-    return ValidatedEnvironment(
-        name=document["metadata"]["name"],
-        api_version=document["apiVersion"],
-        digest=sha256_hex(document),
-        document=document,
-    )
+    try:
+        canonical_bytes = canonical_json_bytes(document)
+    except CanonicalizationError as exc:
+        raise ConfigValidationError(
+            (
+                ValidationIssue(
+                    pointer="",
+                    message="value is not representable as canonical JSON",
+                ),
+            )
+        ) from exc
+    return _validated_environment(canonical_bytes)
 
 
 def load_and_validate(path: Path) -> ValidatedEnvironment:

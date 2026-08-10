@@ -234,3 +234,67 @@ def test_root_schema_issue_uses_the_rfc_6901_root_pointer() -> None:
         validate_document([])
 
     assert raised.value.issues[0].pointer == ""
+
+
+def test_validated_environment_owns_an_immutable_snapshot() -> None:
+    document = {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Environment",
+        "metadata": {"name": "snapshot"},
+        "spec": {
+            "target": {
+                "connectionAdapter": "noop",
+                "runtimeAdapter": "noop",
+                "config": {"nested": {"value": "original"}},
+            }
+        },
+    }
+    environment = validate_document(document)
+    original_digest = environment.digest
+
+    document["metadata"]["name"] = "caller-mutated"
+    document["spec"]["target"]["connectionAdapter"] = "caller-mutated"
+    document["spec"]["target"]["config"]["nested"]["value"] = "caller-mutated"
+    first_read = environment.document
+    first_read["metadata"]["name"] = "consumer-mutated"
+    first_read["spec"]["target"]["runtimeAdapter"] = "consumer-mutated"
+
+    assert environment.name == "snapshot"
+    assert environment.api_version == "forge.dev/v1alpha1"
+    assert environment.digest == original_digest
+    assert environment.document["metadata"]["name"] == "snapshot"
+    assert environment.document["spec"]["target"] == {
+        "connectionAdapter": "noop",
+        "runtimeAdapter": "noop",
+        "config": {"nested": {"value": "original"}},
+    }
+
+
+@pytest.mark.parametrize("terminator", ["\n", "\r", "\u2028", "\u2029"])
+@pytest.mark.parametrize(
+    "field",
+    ["metadata.name", "target.connectionAdapter", "target.runtimeAdapter"],
+)
+def test_environment_identifiers_reject_line_terminators(
+    terminator: str, field: str
+) -> None:
+    document = {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Environment",
+        "metadata": {"name": "example"},
+        "spec": {
+            "target": {
+                "connectionAdapter": "noop",
+                "runtimeAdapter": "noop",
+            }
+        },
+    }
+    if field == "metadata.name":
+        document["metadata"]["name"] += terminator
+    elif field == "target.connectionAdapter":
+        document["spec"]["target"]["connectionAdapter"] += terminator
+    else:
+        document["spec"]["target"]["runtimeAdapter"] += terminator
+
+    with pytest.raises(ConfigValidationError):
+        validate_document(document)

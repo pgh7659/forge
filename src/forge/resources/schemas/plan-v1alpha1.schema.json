@@ -13,7 +13,7 @@
       "additionalProperties": false,
       "required": ["id"],
       "properties": {
-        "id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        "id": {"$ref": "#/$defs/digest"}
       }
     },
     "spec": {
@@ -34,17 +34,20 @@
   "$defs": {
     "adapterId": {
       "type": "string",
-      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+      "not": {"pattern": "[\\n\\r\\u2028\\u2029]"}
     },
     "digest": {
       "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "not": {"pattern": "[\\n\\r\\u2028\\u2029]"}
     },
     "environmentName": {
       "type": "string",
       "minLength": 1,
       "maxLength": 63,
-      "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+      "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+      "not": {"pattern": "[\\n\\r\\u2028\\u2029]"}
     },
     "environment": {
       "type": "object",
@@ -79,7 +82,11 @@
       "additionalProperties": false,
       "required": ["id", "action", "resource", "details"],
       "properties": {
-        "id": {"type": "string", "pattern": "^op-[1-9][0-9]*$"},
+        "id": {
+          "type": "string",
+          "pattern": "^op-[1-9][0-9]*$",
+          "not": {"pattern": "[\\n\\r\\u2028\\u2029]"}
+        },
         "action": {"enum": ["create", "update", "replace", "delete"]},
         "resource": {"$ref": "#/$defs/resource"},
         "details": {"type": "object"}

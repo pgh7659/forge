@@ -15,6 +15,7 @@ from forge.canonical import CanonicalizationError, canonical_json_bytes, sha256_
 API_VERSION = "forge.dev/v1alpha1"
 PLAN_KIND = "Plan"
 PLANNING_CONTRACT_VERSION = "forge.dev/planning/v1alpha1"
+_VERIFICATION_SEAL = object()
 
 
 class PlanContractError(ValueError):
@@ -47,6 +48,8 @@ class PlanningBasis:
         operations: tuple[dict[str, object], ...],
         contract_version: str = PLANNING_CONTRACT_VERSION,
     ) -> PlanningBasis:
+        if type(operations) is not tuple:
+            raise PlanContractError("operations must be an ordered tuple")
         observation_bytes = _canonical_input(observation)
         operations_bytes = _canonical_input(list(operations))
         if not isinstance(json.loads(observation_bytes), dict):
@@ -84,15 +87,27 @@ class PlanArtifact:
         return value
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class VerifiedPlan:
     canonical_bytes: bytes
     plan_id: str
+    _verification_seal: object
+
+    def __init__(self, *, canonical_bytes: bytes, plan_id: str) -> None:
+        raise TypeError("VerifiedPlan values are issued only by verify_plan")
 
     def document(self) -> dict[str, Any]:
         value = json.loads(self.canonical_bytes)
         assert isinstance(value, dict)
         return value
+
+
+def _verified_plan(canonical_bytes: bytes, plan_id: str) -> VerifiedPlan:
+    verified = object.__new__(VerifiedPlan)
+    object.__setattr__(verified, "canonical_bytes", canonical_bytes)
+    object.__setattr__(verified, "plan_id", plan_id)
+    object.__setattr__(verified, "_verification_seal", _VERIFICATION_SEAL)
+    return verified
 
 
 @lru_cache(maxsize=1)
@@ -107,7 +122,7 @@ def _canonical_input(value: object) -> bytes:
     try:
         return canonical_json_bytes(value)
     except CanonicalizationError as exc:
-        raise PlanContractError("planning input is not RFC 8785 canonicalizable") from exc
+        raise PlanContractError("planning input is not JSON/I-JSON compatible") from exc
 
 
 def _plan_preimage(basis: PlanningBasis) -> dict[str, Any]:
@@ -162,6 +177,10 @@ def create_plan(basis: PlanningBasis) -> PlanArtifact:
 
 
 def verify_plan(document: object) -> VerifiedPlan:
+    try:
+        canonical_bytes = canonical_json_bytes(document)
+    except CanonicalizationError as exc:
+        raise PlanContractError("plan is not JSON/I-JSON compatible") from exc
     _validate_schema(document)
     assert isinstance(document, dict)
     spec = document["spec"]
@@ -187,16 +206,17 @@ def verify_plan(document: object) -> VerifiedPlan:
     if metadata_id != expected_plan_id:
         raise PlanContractError("plan ID does not match its preimage")
 
-    try:
-        canonical_bytes = canonical_json_bytes(document)
-    except CanonicalizationError as exc:
-        raise PlanContractError("plan is not RFC 8785 canonicalizable") from exc
-    return VerifiedPlan(canonical_bytes=canonical_bytes, plan_id=expected_plan_id)
+    return _verified_plan(canonical_bytes, expected_plan_id)
 
 
 def is_stale(verified_plan: VerifiedPlan, basis: PlanningBasis) -> bool:
     if not isinstance(verified_plan, VerifiedPlan):
         raise TypeError("verified_plan must be a VerifiedPlan")
+    if (
+        getattr(verified_plan, "_verification_seal", None)
+        is not _VERIFICATION_SEAL
+    ):
+        raise PlanContractError("plan must be verified before stale comparison")
     if not isinstance(basis, PlanningBasis):
         raise TypeError("basis must be a PlanningBasis")
     return verified_plan.plan_id != _plan_id(_plan_preimage(basis))

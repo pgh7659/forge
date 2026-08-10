@@ -307,7 +307,7 @@ git commit -m "feat: add exact no-op planning adapter"
 
 **Interfaces:**
 - Consumes: `load_and_validate`, `PlanningRegistry`, `PlanningUnavailable`, `default_planning_registry`, and `plan_environment`.
-- Produces: `_run_plan(path: Path, stdout: TextIO, stderr: TextIO, registry: PlanningRegistry) -> int` and public `forge plan -f/--config PATH`.
+- Produces: `_run_plan(path: Path, stdout: BinaryIO, stderr: TextIO, registry: PlanningRegistry) -> int` and public `forge plan -f/--config PATH`.
 - `main` constructs the default registry only for `plan`; `validate` behavior remains unchanged.
 
 - [ ] **Step 1: Write failing CLI usage and success tests**
@@ -339,7 +339,7 @@ Expected: tests fail because the parser has no `plan` command and `_run_plan` do
 
 Add the `plan` subparser beside `validate`, with identical required `-f/--config` arguments. Keep the existing owned configuration error formatting by extracting a small shared helper only if it removes duplication without changing output.
 
-Implement `_run_plan` in this exact order: load and validate; map read errors to 3; map configuration errors to 4; call `plan_environment`; map `PlanningUnavailable` to `PLAN_UNAVAILABLE {connection}+{runtime}: {owned_reason}` and 5; on success decode `artifact.canonical_bytes` as UTF-8 and write it plus `"\n"` to stdout. Do not print a status prefix or catch unexpected exceptions.
+Implement `_run_plan` in this exact order: load and validate; map read errors to 3; map configuration errors to 4; call `plan_environment`; map `PlanningUnavailable` to `PLAN_UNAVAILABLE {connection}+{runtime}: {owned_reason}` and 5; on success write `artifact.canonical_bytes + b"\n"` directly to binary stdout. Do not print a status prefix or catch unexpected exceptions.
 
 - [ ] **Step 5: Run CLI, unit, and full validation**
 

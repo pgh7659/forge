@@ -18,7 +18,8 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 63,
-          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+          "not": {"pattern": "[\\n\\r\\u2028\\u2029]"}
         }
       }
     },
@@ -41,7 +42,8 @@
   "$defs": {
     "adapterId": {
       "type": "string",
-      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+      "not": {"pattern": "[\\n\\r\\u2028\\u2029]"}
     },
     "adapterSelection": {
       "type": "object",

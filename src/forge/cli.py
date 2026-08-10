@@ -4,7 +4,7 @@ import argparse
 from collections.abc import Sequence
 import sys
 from pathlib import Path
-from typing import TextIO
+from typing import BinaryIO, TextIO
 
 from forge import __version__
 from forge.adapters import (
@@ -39,7 +39,7 @@ def _run_validate(path: Path, stdout: TextIO, stderr: TextIO) -> int:
 
 def _run_plan(
     path: Path,
-    stdout: TextIO,
+    stdout: BinaryIO,
     stderr: TextIO,
     registry: PlanningRegistry,
 ) -> int:
@@ -58,16 +58,30 @@ def _run_plan(
     try:
         artifact = plan_environment(environment, registry)
     except PlanningUnavailable as exc:
+        connection_adapter = _diagnostic_adapter_component(
+            exc.adapter_key.connection_adapter
+        )
+        runtime_adapter = _diagnostic_adapter_component(
+            exc.adapter_key.runtime_adapter
+        )
         print(
             "PLAN_UNAVAILABLE "
-            f"{exc.adapter_key.connection_adapter}+"
-            f"{exc.adapter_key.runtime_adapter}: {exc.reason}",
+            f"{connection_adapter}+{runtime_adapter}: {exc.reason}",
             file=stderr,
         )
         return 5
 
-    stdout.write(artifact.canonical_bytes.decode("utf-8") + "\n")
+    stdout.write(artifact.canonical_bytes + b"\n")
     return 0
+
+
+def _diagnostic_adapter_component(value: str) -> str:
+    return (
+        value.replace("\n", r"\n")
+        .replace("\r", r"\r")
+        .replace("\u2028", r"\u2028")
+        .replace("\u2029", r"\u2029")
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -118,7 +132,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "plan":
         return _run_plan(
             args.config,
-            sys.stdout,
+            sys.stdout.buffer,
             sys.stderr,
             default_planning_registry(),
         )

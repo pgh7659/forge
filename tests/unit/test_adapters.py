@@ -339,3 +339,106 @@ def test_noop_adapter_does_not_access_network_process_or_filesystem(
     assert observation == {}
     assert observation is not adapter.observe(validated)
     assert operations == ()
+
+
+class _EnvironmentMutatingAdapter:
+    def observe(self, environment: ValidatedEnvironment) -> object:
+        document = environment.document
+        document["metadata"]["name"] = "adapter-mutated"
+        document["spec"]["target"]["connectionAdapter"] = "adapter-mutated"
+        document["spec"]["target"]["config"]["value"] = "adapter-mutated"
+        return {}
+
+    def plan(
+        self, environment: ValidatedEnvironment, observation: object
+    ) -> tuple[dict[str, object], ...]:
+        document = environment.document
+        document["spec"]["target"]["runtimeAdapter"] = "adapter-mutated"
+        return ()
+
+
+def test_adapter_environment_mutation_cannot_change_snapshot_or_plan_binding(
+    tmp_path: Path,
+) -> None:
+    validated = environment(
+        tmp_path,
+        connection_adapter="custom",
+        runtime_adapter="runtime",
+        config="{value: original}",
+    )
+    original_digest = validated.digest
+    key = AdapterKey("custom", "runtime")
+    plan = plan_environment(
+        validated, PlanningRegistry(((key, _EnvironmentMutatingAdapter()),))
+    )
+
+    assert validated.name == "example-noop"
+    assert validated.digest == original_digest
+    assert validated.document["spec"]["target"] == {
+        "connectionAdapter": "custom",
+        "runtimeAdapter": "runtime",
+        "config": {"value": "original"},
+    }
+    assert plan.document()["spec"]["environment"] == {
+        "name": "example-noop",
+        "configDigest": f"sha256:{original_digest}",
+    }
+    assert plan.document()["spec"]["planningAdapter"] == {
+        "contractVersion": "forge.dev/planning/v1alpha1",
+        "connectionAdapter": "custom",
+        "runtimeAdapter": "runtime",
+    }
+
+
+class _NestedTupleObservationAdapter:
+    def observe(self, environment: ValidatedEnvironment) -> object:
+        return {"nested": ("tuple-observation",)}
+
+    def plan(
+        self, environment: ValidatedEnvironment, observation: object
+    ) -> tuple[dict[str, object], ...]:
+        raise AssertionError("invalid observations must not be planned")
+
+
+class _NestedTupleDetailsAdapter:
+    def observe(self, environment: ValidatedEnvironment) -> object:
+        return {}
+
+    def plan(
+        self, environment: ValidatedEnvironment, observation: object
+    ) -> tuple[dict[str, object], ...]:
+        return (
+            {
+                "id": "op-1",
+                "action": "update",
+                "resource": {"kind": "workload", "id": "example"},
+                "details": {"nested": ("tuple-details",)},
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    "adapter", [_NestedTupleObservationAdapter(), _NestedTupleDetailsAdapter()]
+)
+def test_nested_tuple_adapter_results_are_redacted(
+    tmp_path: Path, adapter: object
+) -> None:
+    key = AdapterKey("custom", "runtime")
+    registry = PlanningRegistry(((key, adapter),))  # type: ignore[arg-type]
+
+    with pytest.raises(PlanningUnavailable) as raised:
+        plan_environment(
+            environment(
+                tmp_path,
+                connection_adapter="custom",
+                runtime_adapter="runtime",
+                config="{token: opaque-target-value}",
+            ),
+            registry,
+        )
+
+    assert raised.value.adapter_key == key
+    assert raised.value.reason == "invalid adapter result"
+    assert str(raised.value) == "invalid adapter result"
+    assert "tuple-" not in str(raised.value)
+    assert "opaque-target-value" not in str(raised.value)

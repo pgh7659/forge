@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-from io import StringIO
+from io import BytesIO, StringIO, TextIOWrapper
 import json
 from pathlib import Path
+import sys
 
 import pytest
 
-from forge.adapters import PlanningRegistry, PlanningUnavailable
+from forge.adapters import (
+    PlanningRegistry,
+    PlanningUnavailable,
+    default_planning_registry,
+)
 from forge.cli import _run_plan, main
 from forge.config import ValidatedEnvironment
 from forge.planning import AdapterKey, verify_plan
@@ -61,7 +66,7 @@ def test_plan_requires_config(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_plan_writes_one_verified_canonical_artifact_without_target_config(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsysbinary: pytest.CaptureFixture[bytes]
 ) -> None:
     config_path = tmp_path / "environment.yaml"
     secret = "fixture-secret-value"
@@ -72,21 +77,21 @@ def test_plan_writes_one_verified_canonical_artifact_without_target_config(
     )
 
     exit_code = main(["plan", "-f", str(config_path)])
-    captured = capsys.readouterr()
+    captured = capsysbinary.readouterr()
 
     assert exit_code == 0
-    assert captured.err == ""
-    assert captured.out.endswith("\n")
-    assert captured.out.count("\n") == 1
+    assert captured.err == b""
+    assert captured.out.endswith(b"\n")
+    assert captured.out.count(b"\n") == 1
     verified = verify_plan(json.loads(captured.out))
     assert verified.plan_id.startswith("sha256:")
-    assert captured.out.encode("utf-8") == verified.canonical_bytes + b"\n"
-    assert secret not in captured.out
-    assert str(target_path) not in captured.out
+    assert captured.out == verified.canonical_bytes + b"\n"
+    assert secret.encode() not in captured.out
+    assert str(target_path).encode() not in captured.out
 
 
 def test_equivalent_reordered_configuration_has_byte_identical_plan_output(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsysbinary: pytest.CaptureFixture[bytes]
 ) -> None:
     first_path = tmp_path / "first.yaml"
     second_path = tmp_path / "second.yaml"
@@ -96,11 +101,11 @@ def test_equivalent_reordered_configuration_has_byte_identical_plan_output(
     )
 
     assert main(["plan", "-f", str(first_path)]) == 0
-    first = capsys.readouterr()
+    first = capsysbinary.readouterr()
     assert main(["plan", "-f", str(second_path)]) == 0
-    second = capsys.readouterr()
+    second = capsysbinary.readouterr()
 
-    assert first.err == second.err == ""
+    assert first.err == second.err == b""
     assert first.out == second.out
 
 
@@ -182,13 +187,13 @@ class _RegistrySpy:
 def test_plan_validates_before_registry_access(tmp_path: Path) -> None:
     config_path = tmp_path / "invalid.yaml"
     _write_environment(config_path, config="{value: 9007199254740992}")
-    stdout = StringIO()
+    stdout = BytesIO()
     stderr = StringIO()
 
     exit_code = _run_plan(config_path, stdout, stderr, _RegistrySpy())  # type: ignore[arg-type]
 
     assert exit_code == 4
-    assert stdout.getvalue() == ""
+    assert stdout.getvalue() == b""
     assert stderr.getvalue() == (
         "INVALID 1 issue(s)\n"
         "/spec/target/config/value: "
@@ -236,13 +241,13 @@ def test_plan_redacts_expected_adapter_failures_without_partial_output(
         config=f"{{token: {secret}, path: {target_path}}}",
     )
     registry = PlanningRegistry(((AdapterKey("custom", "runtime"), adapter),))  # type: ignore[arg-type]
-    stdout = StringIO()
+    stdout = BytesIO()
     stderr = StringIO()
 
     exit_code = _run_plan(config_path, stdout, stderr, registry)
 
     assert exit_code == 5
-    assert stdout.getvalue() == ""
+    assert stdout.getvalue() == b""
     assert stderr.getvalue() == f"PLAN_UNAVAILABLE custom+runtime: {reason}\n"
     assert secret not in stderr.getvalue()
     assert str(target_path) not in stderr.getvalue()
@@ -265,7 +270,7 @@ def test_plan_does_not_translate_unexpected_adapter_errors(tmp_path: Path) -> No
     _write_environment(
         config_path, connection_adapter="custom", runtime_adapter="runtime"
     )
-    stdout = StringIO()
+    stdout = BytesIO()
     stderr = StringIO()
     registry = PlanningRegistry(
         ((AdapterKey("custom", "runtime"), _BrokenAdapter()),)
@@ -274,5 +279,134 @@ def test_plan_does_not_translate_unexpected_adapter_errors(tmp_path: Path) -> No
     with pytest.raises(RuntimeError, match="unexpected programming error"):
         _run_plan(config_path, stdout, stderr, registry)
 
-    assert stdout.getvalue() == ""
+    assert stdout.getvalue() == b""
     assert stderr.getvalue() == ""
+
+
+@pytest.mark.parametrize("terminator", ["\n", "\r", "\u2028", "\u2029"])
+def test_plan_rejects_identifier_line_terminators_before_registry_lookup(
+    tmp_path: Path, terminator: str
+) -> None:
+    config_path = tmp_path / "terminated-identifier.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "apiVersion": "forge.dev/v1alpha1",
+                "kind": "Environment",
+                "metadata": {"name": "example-noop"},
+                "spec": {
+                    "target": {
+                        "connectionAdapter": "noop" + terminator,
+                        "runtimeAdapter": "noop",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    stdout = BytesIO()
+    stderr = StringIO()
+
+    exit_code = _run_plan(config_path, stdout, stderr, _RegistrySpy())  # type: ignore[arg-type]
+
+    assert exit_code == 4
+    assert stdout.getvalue() == b""
+    diagnostic = stderr.getvalue()
+    assert diagnostic.endswith("\n")
+    lines = diagnostic.splitlines()
+    assert lines[0].startswith("INVALID ")
+    assert all(
+        line.startswith("/spec/target/connectionAdapter:") for line in lines[1:]
+    )
+    assert all(terminator not in line for line in lines)
+
+
+class _ForgedUnavailableRegistry:
+    def __init__(self, terminator: str) -> None:
+        self.terminator = terminator
+
+    def resolve(self, adapter_key: AdapterKey) -> object:
+        raise PlanningUnavailable(
+            AdapterKey("forged" + self.terminator, "runtime"),
+            "adapter not registered",
+        )
+
+
+@pytest.mark.parametrize(
+    ("terminator", "escaped"),
+    [("\n", r"\n"), ("\r", r"\r"), ("\u2028", r"\u2028"), ("\u2029", r"\u2029")],
+)
+def test_plan_escapes_adapter_key_line_terminators_in_diagnostics(
+    tmp_path: Path, terminator: str, escaped: str
+) -> None:
+    config_path = tmp_path / "valid.yaml"
+    _write_environment(config_path)
+    stdout = BytesIO()
+    stderr = StringIO()
+
+    exit_code = _run_plan(
+        config_path,
+        stdout,
+        stderr,
+        _ForgedUnavailableRegistry(terminator),  # type: ignore[arg-type]
+    )
+
+    assert exit_code == 5
+    assert stdout.getvalue() == b""
+    assert stderr.getvalue() == (
+        f"PLAN_UNAVAILABLE forged{escaped}+runtime: adapter not registered\n"
+    )
+    assert terminator not in stderr.getvalue()[:-1]
+
+
+def test_plan_binary_output_bypasses_text_newline_translation(tmp_path: Path) -> None:
+    config_path = tmp_path / "environment.yaml"
+    _write_environment(config_path)
+    raw_stdout = BytesIO()
+    translated_stdout = TextIOWrapper(
+        raw_stdout, encoding="utf-8", newline="\r\n", write_through=True
+    )
+    stderr = StringIO()
+
+    exit_code = _run_plan(
+        config_path,
+        translated_stdout.buffer,
+        stderr,
+        default_planning_registry(),
+    )
+    translated_stdout.flush()
+    output = raw_stdout.getvalue()
+
+    assert exit_code == 0
+    assert stderr.getvalue() == ""
+    assert output.endswith(b"\n")
+    assert not output.endswith(b"\r\n")
+    verified = verify_plan(json.loads(output))
+    assert output == verified.canonical_bytes + b"\n"
+
+
+class _BinaryStdoutProbe:
+    def __init__(self) -> None:
+        self.buffer = BytesIO()
+
+    def write(self, value: str) -> int:
+        raise AssertionError("plan success must not use the text stdout path")
+
+    def flush(self) -> None:
+        pass
+
+
+def test_plan_main_uses_stdout_binary_buffer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = tmp_path / "environment.yaml"
+    _write_environment(config_path)
+    stdout = _BinaryStdoutProbe()
+    monkeypatch.setattr(sys, "stdout", stdout)
+
+    exit_code = main(["plan", "--config", str(config_path)])
+
+    assert exit_code == 0
+    output = stdout.buffer.getvalue()
+    verified = verify_plan(json.loads(output))
+    assert output == verified.canonical_bytes + b"\n"
