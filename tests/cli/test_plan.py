@@ -78,7 +78,9 @@ def test_plan_writes_one_verified_canonical_artifact_without_target_config(
     assert captured.err == ""
     assert captured.out.endswith("\n")
     assert captured.out.count("\n") == 1
-    assert verify_plan(json.loads(captured.out)).plan_id.startswith("sha256:")
+    verified = verify_plan(json.loads(captured.out))
+    assert verified.plan_id.startswith("sha256:")
+    assert captured.out.encode("utf-8") == verified.canonical_bytes + b"\n"
     assert secret not in captured.out
     assert str(target_path) not in captured.out
 
