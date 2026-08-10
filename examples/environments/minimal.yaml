@@ -1,0 +1,15 @@
+apiVersion: forge.dev/v1alpha1
+kind: Environment
+metadata:
+  name: example-primary
+spec:
+  target:
+    connectionAdapter: ssh
+    runtimeAdapter: systemd
+  gateway:
+    adapter: example-messaging
+  executor:
+    adapter: example-executor
+    maxConcurrency: 1
+  state:
+    adapter: sqlite

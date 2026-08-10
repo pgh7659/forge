@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forge.dev/schemas/v1alpha1/environment.json",
+  "title": "Forge Environment v1alpha1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {"const": "forge.dev/v1alpha1"},
+    "kind": {"const": "Environment"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target"],
+      "properties": {
+        "target": {"$ref": "#/$defs/target"},
+        "gateway": {"$ref": "#/$defs/adapterSelection"},
+        "assistant": {"$ref": "#/$defs/adapterSelection"},
+        "executor": {"$ref": "#/$defs/executorSelection"},
+        "state": {"$ref": "#/$defs/adapterSelection"},
+        "workspace": {"$ref": "#/$defs/adapterSelection"},
+        "sourceControl": {"$ref": "#/$defs/adapterSelection"},
+        "secrets": {"$ref": "#/$defs/adapterSelection"}
+      }
+    }
+  },
+  "$defs": {
+    "adapterId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
+    "adapterSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapter"],
+      "properties": {
+        "adapter": {"$ref": "#/$defs/adapterId"},
+        "config": {"type": "object"}
+      }
+    },
+    "executorSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapter"],
+      "properties": {
+        "adapter": {"$ref": "#/$defs/adapterId"},
+        "config": {"type": "object"},
+        "maxConcurrency": {"type": "integer", "minimum": 1}
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connectionAdapter", "runtimeAdapter"],
+      "properties": {
+        "connectionAdapter": {"$ref": "#/$defs/adapterId"},
+        "runtimeAdapter": {"$ref": "#/$defs/adapterId"},
+        "config": {"type": "object"}
+      }
+    }
+  }
+}
