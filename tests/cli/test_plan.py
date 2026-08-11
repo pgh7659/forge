@@ -160,7 +160,7 @@ def test_plan_does_not_fallback_for_unregistered_adapter_tuples(
         (
             ROOT / "tests/fixtures/environments/invalid-extra-key.yaml",
             4,
-            "INVALID 1 issue(s)\n/spec/unexpected:",
+            "INVALID 1 issue(s)\n/spec: unexpected property is not allowed",
         ),
     ],
 )
@@ -177,6 +177,64 @@ def test_plan_preserves_owned_read_parse_and_validation_errors(
     assert captured.out == ""
     assert captured.err.startswith(expected_prefix)
     assert "Traceback" not in captured.err
+
+
+def test_plan_redacts_malformed_yaml_source(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sentinel = "fixture-credential-SENTINEL-plan-yaml-a7e519"
+    path = tmp_path / "invalid-source.yaml"
+    source_line = f"metadata: [name: {sentinel}"
+    path.write_text(
+        "apiVersion: forge.dev/v1alpha1\n"
+        "kind: Environment\n"
+        f"{source_line}\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["plan", "--config", str(path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 3
+    assert captured.out == ""
+    assert captured.err.startswith(
+        f"READ_ERROR {path}: cannot parse YAML or JSON: "
+        "invalid syntax at line "
+    )
+    assert captured.err.endswith("\n")
+    assert "column " in captured.err
+    assert sentinel not in captured.err
+    assert source_line not in captured.err
+    assert "while parsing" not in captured.err
+    assert "^" not in captured.err
+
+
+def test_plan_redacts_schema_invalid_identifier_value(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sentinel = "fixture-credential-SENTINEL-plan-name-54cd80"
+    path = tmp_path / "invalid-name.yaml"
+    path.write_text(
+        "apiVersion: forge.dev/v1alpha1\n"
+        "kind: Environment\n"
+        f"metadata: {{name: {sentinel}}}\n"
+        "spec:\n"
+        "  target:\n"
+        "    connectionAdapter: noop\n"
+        "    runtimeAdapter: noop\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["plan", "--config", str(path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 4
+    assert captured.out == ""
+    assert captured.err == (
+        "INVALID 1 issue(s)\n"
+        "/metadata/name: string does not match the required pattern\n"
+    )
+    assert sentinel not in captured.err
 
 
 class _RegistrySpy:

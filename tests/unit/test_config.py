@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 import pytest
 
@@ -21,14 +22,27 @@ def test_minimal_environment_is_valid() -> None:
     assert len(result.digest) == 64
 
 
-def test_unknown_property_reports_json_pointer() -> None:
-    with pytest.raises(ConfigValidationError) as raised:
-        load_and_validate(
-            ROOT / "tests/fixtures/environments/invalid-extra-key.yaml"
-        )
+def test_unknown_property_uses_safe_parent_pointer_and_owned_reason() -> None:
+    sentinel = "fixture-credential-SENTINEL-unknown-property-93f4a8"
+    document = {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Environment",
+        "metadata": {"name": "unknown-property"},
+        "spec": {
+            "target": {
+                "connectionAdapter": "noop",
+                "runtimeAdapter": "noop",
+            },
+            sentinel: True,
+        },
+    }
 
-    assert raised.value.issues[0].pointer == "/spec/unexpected"
-    assert "Additional properties are not allowed" in raised.value.issues[0].message
+    with pytest.raises(ConfigValidationError) as raised:
+        validate_document(document)
+
+    assert raised.value.issues[0].pointer == "/spec"
+    assert raised.value.issues[0].message == "unexpected property is not allowed"
+    assert sentinel not in repr(raised.value.issues)
 
 
 def test_invalid_yaml_is_a_read_error() -> None:
@@ -36,6 +50,59 @@ def test_invalid_yaml_is_a_read_error() -> None:
         load_and_validate(ROOT / "tests/fixtures/environments/invalid-syntax.yaml")
 
     assert "cannot parse YAML or JSON" in str(raised.value)
+
+
+def test_invalid_yaml_error_owns_safe_location_without_source_or_cause(
+    tmp_path: Path,
+) -> None:
+    sentinel = "fixture-credential-SENTINEL-yaml-source-7d2c91"
+    path = tmp_path / "invalid-source.yaml"
+    source_line = f"metadata: [name: {sentinel}"
+    path.write_text(
+        "apiVersion: forge.dev/v1alpha1\n"
+        "kind: Environment\n"
+        f"{source_line}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigReadError) as raised:
+        load_and_validate(path)
+
+    error = raised.value
+    assert re.fullmatch(
+        r"cannot parse YAML or JSON: invalid syntax at line \d+, column \d+",
+        str(error),
+    )
+    assert sentinel not in str(error)
+    assert sentinel not in repr(error)
+    assert source_line not in str(error)
+    assert error.__cause__ is None
+    assert error.__context__ is None
+
+
+def test_schema_invalid_identifier_uses_owned_value_free_diagnostic() -> None:
+    sentinel = "fixture-credential-SENTINEL-invalid-name-6b4e20"
+    document = {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Environment",
+        "metadata": {"name": sentinel},
+        "spec": {
+            "target": {
+                "connectionAdapter": "noop",
+                "runtimeAdapter": "noop",
+            }
+        },
+    }
+
+    with pytest.raises(ConfigValidationError) as raised:
+        validate_document(document)
+
+    assert raised.value.issues[0].pointer == "/metadata/name"
+    assert (
+        raised.value.issues[0].message
+        == "string does not match the required pattern"
+    )
+    assert sentinel not in repr(raised.value.issues)
 
 
 def test_duplicate_key_is_a_read_error() -> None:

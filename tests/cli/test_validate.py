@@ -74,6 +74,64 @@ def test_validate_reports_parse_error(capsys) -> None:
     assert "cannot parse YAML or JSON" in captured.err
 
 
+def test_validate_redacts_malformed_yaml_source(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sentinel = "fixture-credential-SENTINEL-validate-yaml-c1a407"
+    path = tmp_path / "invalid-source.yaml"
+    source_line = f"metadata: [name: {sentinel}"
+    path.write_text(
+        "apiVersion: forge.dev/v1alpha1\n"
+        "kind: Environment\n"
+        f"{source_line}\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["validate", "--config", str(path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 3
+    assert captured.out == ""
+    assert captured.err.startswith(
+        f"READ_ERROR {path}: cannot parse YAML or JSON: "
+        "invalid syntax at line "
+    )
+    assert captured.err.endswith("\n")
+    assert "column " in captured.err
+    assert sentinel not in captured.err
+    assert source_line not in captured.err
+    assert "while parsing" not in captured.err
+    assert "^" not in captured.err
+
+
+def test_validate_redacts_schema_invalid_identifier_value(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sentinel = "fixture-credential-SENTINEL-validate-name-2f0d83"
+    path = tmp_path / "invalid-name.yaml"
+    path.write_text(
+        "apiVersion: forge.dev/v1alpha1\n"
+        "kind: Environment\n"
+        f"metadata: {{name: {sentinel}}}\n"
+        "spec:\n"
+        "  target:\n"
+        "    connectionAdapter: noop\n"
+        "    runtimeAdapter: noop\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["validate", "--config", str(path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 4
+    assert captured.out == ""
+    assert captured.err == (
+        "INVALID 1 issue(s)\n"
+        "/metadata/name: string does not match the required pattern\n"
+    )
+    assert sentinel not in captured.err
+
+
 def test_validate_reports_schema_issues(capsys) -> None:
     path = ROOT / "tests/fixtures/environments/invalid-extra-key.yaml"
     exit_code = main(["validate", "--config", str(path)])
@@ -82,7 +140,8 @@ def test_validate_reports_schema_issues(capsys) -> None:
     assert exit_code == 4
     assert captured.out == ""
     assert captured.err.startswith("INVALID 1 issue(s)\n")
-    assert "/spec/unexpected:" in captured.err
+    assert captured.err.endswith("/spec: unexpected property is not allowed\n")
+    assert "unexpected'" not in captured.err
 
 
 def test_validate_reports_unhashable_yaml_key_as_read_error(

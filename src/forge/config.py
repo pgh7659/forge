@@ -124,15 +124,35 @@ def _has_surrogate_code_point(value: str) -> bool:
 
 
 def _issue_pointer(error: Any) -> str:
-    parts = list(error.absolute_path)
-    if error.validator == "additionalProperties" and isinstance(
-        error.instance, dict
-    ):
-        known = set(error.schema.get("properties", {}))
-        unexpected = sorted(set(error.instance) - known)
-        if len(unexpected) == 1:
-            parts.append(unexpected[0])
-    return _json_pointer(parts)
+    return _json_pointer(list(error.absolute_path))
+
+
+_SCHEMA_ISSUE_MESSAGES = {
+    "additionalProperties": "unexpected property is not allowed",
+    "const": "value does not match the required constant",
+    "maxLength": "string is longer than allowed",
+    "minLength": "string is shorter than allowed",
+    "minimum": "number is below the allowed minimum",
+    "not": "value matches a prohibited form",
+    "pattern": "string does not match the required pattern",
+    "required": "required property is missing",
+    "type": "value has the wrong type",
+}
+
+
+def _schema_issue_message(error: Any) -> str:
+    return _SCHEMA_ISSUE_MESSAGES.get(
+        error.validator,
+        "value does not satisfy the configuration schema",
+    )
+
+
+def _schema_error_sort_key(error: Any) -> tuple[object, ...]:
+    return (
+        tuple(str(part) for part in error.absolute_path),
+        tuple(str(part) for part in error.absolute_schema_path),
+        str(error.validator),
+    )
 
 
 def _json_compatibility_issues(document: object) -> tuple[ValidationIssue, ...]:
@@ -227,18 +247,61 @@ def _schema() -> dict[str, Any]:
     return schema
 
 
+def _read_error_message(error: OSError) -> str:
+    if isinstance(error, FileNotFoundError):
+        reason = "file not found"
+    elif isinstance(error, PermissionError):
+        reason = "permission denied"
+    elif isinstance(error, IsADirectoryError):
+        reason = "path is a directory"
+    else:
+        reason = "I/O error"
+    return f"cannot read configuration: {reason}"
+
+
+def _yaml_error_message(error: yaml.YAMLError) -> str:
+    if isinstance(error, ConstructorError):
+        problem = getattr(error, "problem", None)
+        if isinstance(problem, str) and problem.startswith("duplicate mapping key"):
+            reason = "duplicate mapping key"
+        elif problem == "unhashable mapping key":
+            reason = "unhashable mapping key"
+        else:
+            reason = "unsupported YAML structure"
+    else:
+        reason = "invalid syntax"
+
+    mark = getattr(error, "problem_mark", None)
+    if mark is None:
+        mark = getattr(error, "context_mark", None)
+    line = getattr(mark, "line", None)
+    column = getattr(mark, "column", None)
+    if isinstance(line, int) and isinstance(column, int):
+        return f"{reason} at line {line + 1}, column {column + 1}"
+    return reason
+
+
 def load_raw_document(path: Path) -> object:
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
-        raise ConfigReadError(f"cannot read {path}: {exc.strerror}") from exc
-    except UnicodeError as exc:
-        raise ConfigReadError(f"cannot decode UTF-8 from {path}: {exc}") from exc
+        read_error = ConfigReadError(_read_error_message(exc))
+    except UnicodeError:
+        read_error = ConfigReadError("cannot decode UTF-8 configuration")
+    else:
+        read_error = None
+
+    if read_error is not None:
+        raise read_error
 
     try:
         return yaml.load(text, Loader=_UniqueKeyLoader)
     except yaml.YAMLError as exc:
-        raise ConfigReadError(f"cannot parse YAML or JSON from {path}: {exc}") from exc
+        parse_error = ConfigReadError(
+            f"cannot parse YAML or JSON: {_yaml_error_message(exc)}"
+        )
+
+    raise parse_error
 
 
 def validate_document(document: object) -> ValidatedEnvironment:
@@ -247,18 +310,12 @@ def validate_document(document: object) -> ValidatedEnvironment:
         raise ConfigValidationError(compatibility_issues)
 
     validator = Draft202012Validator(_schema())
-    errors = sorted(
-        validator.iter_errors(document),
-        key=lambda error: (
-            tuple(str(part) for part in error.absolute_path),
-            error.message,
-        ),
-    )
+    errors = sorted(validator.iter_errors(document), key=_schema_error_sort_key)
     if errors:
         issues = tuple(
             ValidationIssue(
                 pointer=_issue_pointer(error),
-                message=error.message,
+                message=_schema_issue_message(error),
             )
             for error in errors
         )
@@ -267,16 +324,19 @@ def validate_document(document: object) -> ValidatedEnvironment:
     assert isinstance(document, dict)
     try:
         canonical_bytes = canonical_json_bytes(document)
-    except CanonicalizationError as exc:
-        raise ConfigValidationError(
+    except CanonicalizationError:
+        canonical_error = ConfigValidationError(
             (
                 ValidationIssue(
                     pointer="",
                     message="value is not representable as canonical JSON",
                 ),
             )
-        ) from exc
-    return _validated_environment(canonical_bytes)
+        )
+    else:
+        return _validated_environment(canonical_bytes)
+
+    raise canonical_error
 
 
 def load_and_validate(path: Path) -> ValidatedEnvironment:
