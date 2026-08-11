@@ -9,6 +9,7 @@ description = "Portable control framework for reproducible AI-assisted engineeri
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "cryptography>=50,<51",
   "jsonschema>=4.23,<5",
   "PyYAML>=6.0.2,<7",
   "rfc8785>=0.1.4,<0.2",
