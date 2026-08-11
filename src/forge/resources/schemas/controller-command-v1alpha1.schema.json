@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forge.dev/schemas/controller/v1alpha1/command.json",
+  "title": "Forge controller command v1alpha1",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "operation", "request"],
+      "properties": {
+        "protocolVersion": {"const": "forge.dev/controller/v1alpha1"},
+        "operation": {"const": "submitRequest"},
+        "request": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sourceNamespace", "sourceEventId", "sourceEventTime", "actorRef", "channelRef", "projectRef", "repositoryRef", "mode", "body", "security"],
+          "properties": {
+            "sourceNamespace": {"$ref": "#/$defs/token"},
+            "sourceEventId": {"$ref": "#/$defs/reference"},
+            "sourceEventTime": {"$ref": "#/$defs/utcTimestamp"},
+            "actorRef": {"$ref": "#/$defs/reference"},
+            "channelRef": {"$ref": "#/$defs/reference"},
+            "projectRef": {"$ref": "#/$defs/reference"},
+            "repositoryRef": {"$ref": "#/$defs/reference"},
+            "mode": {"const": "plan"},
+            "body": {"type": "string", "minLength": 1, "maxLength": 65536},
+            "security": {
+              "$comment": "Envelope validation proves structure only, not authentication, authorization, provenance validity, trust, policy, or host enforcement.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["contractVersion", "objectId", "objectType", "createdAt", "trust", "taint", "provenanceRef", "producerClass", "classification", "retentionHint"],
+              "properties": {
+                "contractVersion": {"const": "forge.dev/security/v1alpha1"},
+                "objectId": {"$ref": "#/$defs/reference"},
+                "objectType": {"$ref": "#/$defs/token"},
+                "createdAt": {"$ref": "#/$defs/utcTimestamp"},
+                "trust": {"enum": ["trusted", "untrusted", "unknown"]},
+                "taint": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/token"}},
+                "provenanceRef": {"$ref": "#/$defs/reference"},
+                "producerClass": {"$ref": "#/$defs/token"},
+                "classification": {"$ref": "#/$defs/token"},
+                "retentionHint": {"$ref": "#/$defs/token"}
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "operation", "taskId"],
+      "properties": {
+        "protocolVersion": {"const": "forge.dev/controller/v1alpha1"},
+        "operation": {"const": "getTask"},
+        "taskId": {"$ref": "#/$defs/controllerTaskId"}
+      }
+    }
+  ],
+  "$defs": {
+    "reference": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$"},
+    "token": {"type": "string", "pattern": "^[a-z][a-z0-9._:-]{0,127}$"},
+    "controllerTaskId": {"type": "string", "pattern": "^tsk_[0-9a-f]{32}$"},
+    "utcTimestamp": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"}
+  }
+}

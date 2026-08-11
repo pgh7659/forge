@@ -1,0 +1,1 @@
+{"protocolVersion":"forge.dev/controller/v1alpha1","operation":"getTask","ok":true,"result":{"requestId":"req_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","taskId":"tsk_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","mode":"plan","status":"queued","createdAt":"2026-08-11T00:00:01Z","updatedAt":"2026-08-11T00:00:01Z"}}
