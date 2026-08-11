@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import hashlib
 import hmac
 import re
 import sqlite3
 import threading
 from collections import Counter
 from collections.abc import Callable, Iterator
+from datetime import datetime
 from pathlib import Path
 from types import TracebackType
 
+from forge.controller_protocol import CONTROLLER_PROTOCOL_VERSION
 from forge.request_crypto import (
     EncryptedValue,
     EncryptionError,
@@ -18,10 +21,24 @@ from forge.request_crypto import (
 )
 from forge.state_ledger import (
     ControllerAlreadyRunning,
+    EncryptedRequestRecord,
+    IdempotencyConflict,
+    IngestBundle,
+    IngestOutcome,
+    NewTaskEvent,
+    NewTaskRecord,
     StateError,
+    StateTransitionConflict,
+    TaskNotFound,
     TaskSnapshot,
 )
-from forge.task_state import TaskStatus
+from forge.task_state import (
+    InvalidTaskTransition,
+    TaskStatus,
+    validate_claim_transition,
+    validate_general_transition,
+    validate_initial_status,
+)
 
 
 SCHEMA_V1_DDL = """CREATE TABLE ledger_metadata (
@@ -101,7 +118,16 @@ CREATE INDEX ix_task_events_task_sequence
 
 _SCHEMA_VERSION = 1
 _KEY_VERIFIER_PLAINTEXT = b"forge-state-key-verifier/v1"
+_REQUEST_ID_PATTERN = re.compile(r"req_[0-9a-f]{32}")
+_TASK_ID_PATTERN = re.compile(r"tsk_[0-9a-f]{32}")
 _EVENT_ID_PATTERN = re.compile(r"evt_[0-9a-f]{32}")
+_REFERENCE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}")
+_TOKEN_PATTERN = re.compile(r"[a-z][a-z0-9._:-]{0,127}")
+_DIGEST_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
+_TIMESTAMP_PATTERN = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]{1,6})?Z"
+)
 _APPLICATION_OBJECT_NAMES = frozenset(
     {
         "ledger_metadata",
@@ -218,6 +244,154 @@ _TASK_COLUMNS = """
     request_id, task_id, project_ref, repository_ref, mode,
     status, reason_code, created_at, updated_at
 """
+
+_ENCRYPTED_REQUEST_COLUMNS = """
+    request_id, protocol_version, source_namespace, source_event_id,
+    source_event_time, actor_ref, channel_ref, project_ref, repository_ref,
+    mode, security_envelope, submission_digest, body_digest, security_digest,
+    encryption_algorithm, key_id, nonce, ciphertext, received_at
+"""
+
+
+def _matches(value: object, pattern: re.Pattern[str]) -> bool:
+    return type(value) is str and pattern.fullmatch(value) is not None
+
+
+def _valid_timestamp(value: object) -> bool:
+    if not _matches(value, _TIMESTAMP_PATTERN):
+        return False
+    assert type(value) is str
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError:
+        return False
+    offset = parsed.utcoffset()
+    return offset is not None and offset.total_seconds() == 0
+
+
+def _validate_encrypted_request(
+    record: object,
+    *,
+    active_key_id: str,
+    encryption_algorithm: str,
+) -> EncryptedRequestRecord:
+    if type(record) is not EncryptedRequestRecord:
+        raise StateError()
+    if (
+        not _matches(record.request_id, _REQUEST_ID_PATTERN)
+        or record.protocol_version != CONTROLLER_PROTOCOL_VERSION
+        or not _matches(record.source_namespace, _TOKEN_PATTERN)
+        or not _matches(record.source_event_id, _REFERENCE_PATTERN)
+        or not _valid_timestamp(record.source_event_time)
+        or not _matches(record.actor_ref, _REFERENCE_PATTERN)
+        or not _matches(record.channel_ref, _REFERENCE_PATTERN)
+        or not _matches(record.project_ref, _REFERENCE_PATTERN)
+        or not _matches(record.repository_ref, _REFERENCE_PATTERN)
+        or record.mode != "plan"
+        or type(record.security_envelope) is not bytes
+        or not record.security_envelope
+        or not _matches(record.submission_digest, _DIGEST_PATTERN)
+        or not _matches(record.body_digest, _DIGEST_PATTERN)
+        or not _matches(record.security_digest, _DIGEST_PATTERN)
+        or record.security_digest
+        != "sha256:" + hashlib.sha256(record.security_envelope).hexdigest()
+        or type(record.encryption_algorithm) is not str
+        or record.encryption_algorithm != encryption_algorithm
+        or not _matches(record.key_id, _REFERENCE_PATTERN)
+        or record.key_id != active_key_id
+        or type(record.nonce) is not bytes
+        or len(record.nonce) != 12
+        or type(record.ciphertext) is not bytes
+        or len(record.ciphertext) < 16
+        or not _valid_timestamp(record.received_at)
+    ):
+        raise StateError()
+    return record
+
+
+def _validate_ingest_bundle(
+    bundle: object,
+    *,
+    active_key_id: str,
+    encryption_algorithm: str,
+) -> IngestBundle:
+    if type(bundle) is not IngestBundle:
+        raise StateError()
+    request = _validate_encrypted_request(
+        bundle.request,
+        active_key_id=active_key_id,
+        encryption_algorithm=encryption_algorithm,
+    )
+    task = bundle.task
+    event = bundle.event
+    if (
+        type(task) is not NewTaskRecord
+        or not _matches(task.task_id, _TASK_ID_PATTERN)
+        or not _matches(task.request_id, _REQUEST_ID_PATTERN)
+        or not _matches(task.project_ref, _REFERENCE_PATTERN)
+        or not _matches(task.repository_ref, _REFERENCE_PATTERN)
+        or task.mode != "plan"
+        or not _valid_timestamp(task.created_at)
+        or task.request_id != request.request_id
+        or task.project_ref != request.project_ref
+        or task.repository_ref != request.repository_ref
+        or task.mode != request.mode
+        or type(event) is not NewTaskEvent
+        or not _matches(event.event_id, _EVENT_ID_PATTERN)
+        or not _matches(event.task_id, _TASK_ID_PATTERN)
+        or event.task_id != task.task_id
+        or event.previous_status is not None
+        or type(event.next_status) is not TaskStatus
+        or event.reason_code is not None
+        or not _matches(event.actor_ref, _REFERENCE_PATTERN)
+        or not _valid_timestamp(event.occurred_at)
+        or request.received_at != task.created_at
+        or task.created_at != event.occurred_at
+    ):
+        raise StateError()
+    try:
+        validate_initial_status(event.next_status)
+    except InvalidTaskTransition:
+        raise StateError() from None
+    return bundle
+
+
+def _validate_event_arguments(
+    *,
+    reason_code: object,
+    actor_ref: object,
+    event_id: object,
+    occurred_at: object,
+) -> None:
+    if (
+        (reason_code is not None and not _matches(reason_code, _TOKEN_PATTERN))
+        or not _matches(actor_ref, _REFERENCE_PATTERN)
+        or not _matches(event_id, _EVENT_ID_PATTERN)
+        or not _valid_timestamp(occurred_at)
+    ):
+        raise StateError()
+
+
+def _allocate_queue_sequence(connection: sqlite3.Connection) -> int:
+    row = connection.execute(
+        """
+        UPDATE ledger_metadata
+        SET next_queue_sequence = next_queue_sequence + 1
+        WHERE singleton = 1
+        RETURNING next_queue_sequence - 1
+        """
+    ).fetchone()
+    if row is None or len(row) != 1 or type(row[0]) is not int or row[0] < 1:
+        raise StateError()
+    return row[0]
+
+
+def _rollback_transaction(connection: sqlite3.Connection) -> None:
+    try:
+        if connection.in_transaction:
+            connection.execute("ROLLBACK")
+    except sqlite3.Error:
+        pass
 
 
 def _schema_statements() -> Iterator[str]:
@@ -555,10 +729,35 @@ def _snapshot_from_row(row: tuple[object, ...]) -> TaskSnapshot:
     )
 
 
+def _encrypted_request_from_row(
+    row: tuple[object, ...],
+    *,
+    active_key_id: str,
+    encryption_algorithm: str,
+) -> EncryptedRequestRecord:
+    if len(row) != 19:
+        raise StateError()
+    record = EncryptedRequestRecord(*row)
+    return _validate_encrypted_request(
+        record,
+        active_key_id=active_key_id,
+        encryption_algorithm=encryption_algorithm,
+    )
+
+
 class SqliteStateLedger:
-    def __init__(self, connection: sqlite3.Connection, lock: threading.RLock) -> None:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        lock: threading.RLock,
+        *,
+        active_key_id: str,
+        encryption_algorithm: str,
+    ) -> None:
         self._connection: sqlite3.Connection | None = connection
         self._lock = lock
+        self._active_key_id = active_key_id
+        self._encryption_algorithm = encryption_algorithm
 
     @classmethod
     def open(
@@ -624,8 +823,16 @@ class SqliteStateLedger:
                 _verify_key_binding(
                     connection, cipher=cipher, key_handle=key_handle
                 )
+                active_key_id, encryption_algorithm, _, _, _ = _read_key_metadata(
+                    connection
+                )
                 connection.execute("COMMIT")
-                ledger = cls(connection, lock)
+                ledger = cls(
+                    connection,
+                    lock,
+                    active_key_id=active_key_id,
+                    encryption_algorithm=encryption_algorithm,
+                )
                 connection_transferred = True
                 return ledger
         except ControllerAlreadyRunning:
@@ -675,6 +882,156 @@ class SqliteStateLedger:
             except sqlite3.Error:
                 raise StateError() from None
 
+    def ingest(self, bundle: IngestBundle) -> IngestOutcome:
+        validated = _validate_ingest_bundle(
+            bundle,
+            active_key_id=self._active_key_id,
+            encryption_algorithm=self._encryption_algorithm,
+        )
+        request = validated.request
+        task = validated.task
+        event = validated.event
+        with self._lock:
+            connection = self._active_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                existing = connection.execute(
+                    """
+                    SELECT request_id, submission_digest
+                    FROM requests
+                    WHERE source_namespace = ? AND source_event_id = ?
+                    """,
+                    (request.source_namespace, request.source_event_id),
+                ).fetchone()
+                if existing is not None:
+                    if (
+                        len(existing) != 2
+                        or not _matches(existing[0], _REQUEST_ID_PATTERN)
+                        or not _matches(existing[1], _DIGEST_PATTERN)
+                    ):
+                        raise StateError()
+                    if existing[1] != request.submission_digest:
+                        raise IdempotencyConflict()
+                    row = connection.execute(
+                        f"SELECT {_TASK_COLUMNS} FROM tasks WHERE request_id = ?",
+                        (existing[0],),
+                    ).fetchone()
+                    if row is None:
+                        raise StateError()
+                    snapshot = _snapshot_from_row(row)
+                    connection.execute("COMMIT")
+                    return IngestOutcome(task=snapshot, created=False)
+
+                queue_sequence = _allocate_queue_sequence(connection)
+                connection.execute(
+                    """
+                    INSERT INTO requests (
+                        request_id, protocol_version, source_namespace,
+                        source_event_id, source_event_time, actor_ref,
+                        channel_ref, project_ref, repository_ref, mode,
+                        security_envelope, submission_digest, body_digest,
+                        security_digest, encryption_algorithm, key_id, nonce,
+                        ciphertext, received_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        request.request_id,
+                        request.protocol_version,
+                        request.source_namespace,
+                        request.source_event_id,
+                        request.source_event_time,
+                        request.actor_ref,
+                        request.channel_ref,
+                        request.project_ref,
+                        request.repository_ref,
+                        request.mode,
+                        request.security_envelope,
+                        request.submission_digest,
+                        request.body_digest,
+                        request.security_digest,
+                        request.encryption_algorithm,
+                        request.key_id,
+                        request.nonce,
+                        request.ciphertext,
+                        request.received_at,
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO tasks (
+                        task_id, request_id, project_ref, repository_ref, mode,
+                        status, reason_code, queue_sequence, created_at,
+                        updated_at
+                    ) VALUES (?, ?, ?, ?, ?, 'queued', NULL, ?, ?, ?)
+                    """,
+                    (
+                        task.task_id,
+                        task.request_id,
+                        task.project_ref,
+                        task.repository_ref,
+                        task.mode,
+                        queue_sequence,
+                        task.created_at,
+                        task.created_at,
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO task_events (
+                        event_id, task_id, previous_status, next_status,
+                        reason_code, actor_ref, occurred_at
+                    ) VALUES (?, ?, NULL, 'queued', NULL, ?, ?)
+                    """,
+                    (
+                        event.event_id,
+                        event.task_id,
+                        event.actor_ref,
+                        event.occurred_at,
+                    ),
+                )
+                row = connection.execute(
+                    f"SELECT {_TASK_COLUMNS} FROM tasks WHERE task_id = ?",
+                    (task.task_id,),
+                ).fetchone()
+                if row is None:
+                    raise StateError()
+                snapshot = _snapshot_from_row(row)
+                connection.execute("COMMIT")
+                return IngestOutcome(task=snapshot, created=True)
+            except IdempotencyConflict:
+                _rollback_transaction(connection)
+                raise
+            except StateError:
+                _rollback_transaction(connection)
+                raise
+            except Exception:
+                _rollback_transaction(connection)
+                raise StateError() from None
+
+    def load_encrypted_request(
+        self, request_id: str
+    ) -> EncryptedRequestRecord | None:
+        if not _matches(request_id, _REQUEST_ID_PATTERN):
+            raise StateError()
+        with self._lock:
+            connection = self._active_connection()
+            try:
+                row = connection.execute(
+                    f"SELECT {_ENCRYPTED_REQUEST_COLUMNS} FROM requests WHERE request_id = ?",
+                    (request_id,),
+                ).fetchone()
+                if row is None:
+                    return None
+                return _encrypted_request_from_row(
+                    row,
+                    active_key_id=self._active_key_id,
+                    encryption_algorithm=self._encryption_algorithm,
+                )
+            except StateError:
+                raise
+            except sqlite3.Error:
+                raise StateError() from None
+
     def get_task(self, task_id: str) -> TaskSnapshot | None:
         with self._lock:
             connection = self._active_connection()
@@ -689,6 +1046,218 @@ class SqliteStateLedger:
             except StateError:
                 raise
             except sqlite3.Error:
+                raise StateError() from None
+
+    def transition(
+        self,
+        *,
+        task_id: str,
+        expected_status: TaskStatus,
+        target_status: TaskStatus,
+        reason_code: str | None,
+        actor_ref: str,
+        event_id: str,
+        occurred_at: str,
+    ) -> TaskSnapshot:
+        if (
+            type(expected_status) is not TaskStatus
+            or type(target_status) is not TaskStatus
+        ):
+            raise StateError()
+        if not _matches(task_id, _TASK_ID_PATTERN):
+            raise StateError()
+        _validate_event_arguments(
+            reason_code=reason_code,
+            actor_ref=actor_ref,
+            event_id=event_id,
+            occurred_at=occurred_at,
+        )
+        with self._lock:
+            connection = self._active_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                current_row = connection.execute(
+                    "SELECT status, queue_sequence FROM tasks WHERE task_id = ?",
+                    (task_id,),
+                ).fetchone()
+                if current_row is None:
+                    raise TaskNotFound()
+                if (
+                    len(current_row) != 2
+                    or type(current_row[0]) is not str
+                    or type(current_row[1]) is not int
+                    or current_row[1] < 1
+                ):
+                    raise StateError()
+                try:
+                    current_status = TaskStatus(current_row[0])
+                except ValueError:
+                    raise StateError() from None
+                if current_status is not expected_status:
+                    raise StateTransitionConflict()
+                validate_general_transition(current_status, target_status)
+                queue_sequence = current_row[1]
+                if target_status is TaskStatus.QUEUED:
+                    queue_sequence = _allocate_queue_sequence(connection)
+                updated = connection.execute(
+                    """
+                    UPDATE tasks
+                    SET status = ?, reason_code = ?, queue_sequence = ?, updated_at = ?
+                    WHERE task_id = ? AND status = ?
+                    """,
+                    (
+                        target_status.value,
+                        reason_code,
+                        queue_sequence,
+                        occurred_at,
+                        task_id,
+                        expected_status.value,
+                    ),
+                )
+                if updated.rowcount != 1:
+                    raise StateTransitionConflict()
+                connection.execute(
+                    """
+                    INSERT INTO task_events (
+                        event_id, task_id, previous_status, next_status,
+                        reason_code, actor_ref, occurred_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        event_id,
+                        task_id,
+                        current_status.value,
+                        target_status.value,
+                        reason_code,
+                        actor_ref,
+                        occurred_at,
+                    ),
+                )
+                row = connection.execute(
+                    f"SELECT {_TASK_COLUMNS} FROM tasks WHERE task_id = ?",
+                    (task_id,),
+                ).fetchone()
+                if row is None:
+                    raise StateError()
+                snapshot = _snapshot_from_row(row)
+                connection.execute("COMMIT")
+                return snapshot
+            except (InvalidTaskTransition, StateTransitionConflict, TaskNotFound):
+                _rollback_transaction(connection)
+                raise
+            except StateError:
+                _rollback_transaction(connection)
+                raise
+            except Exception:
+                _rollback_transaction(connection)
+                raise StateError() from None
+
+    def claim_next_eligible(
+        self,
+        *,
+        max_concurrency: int,
+        actor_ref: str,
+        event_id: str,
+        occurred_at: str,
+    ) -> TaskSnapshot | None:
+        if type(max_concurrency) is not int or max_concurrency <= 0:
+            raise StateError()
+        _validate_event_arguments(
+            reason_code=None,
+            actor_ref=actor_ref,
+            event_id=event_id,
+            occurred_at=occurred_at,
+        )
+        with self._lock:
+            connection = self._active_connection()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                count_row = connection.execute(
+                    "SELECT count(*) FROM tasks WHERE status = 'running'"
+                ).fetchone()
+                if (
+                    count_row is None
+                    or len(count_row) != 1
+                    or type(count_row[0]) is not int
+                    or count_row[0] < 0
+                ):
+                    raise StateError()
+                if count_row[0] >= max_concurrency:
+                    connection.execute("COMMIT")
+                    return None
+                selected = connection.execute(
+                    """
+                    SELECT q.task_id
+                    FROM tasks AS q
+                    WHERE q.status = 'queued'
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM tasks AS r
+                          WHERE r.repository_ref = q.repository_ref
+                            AND r.status = 'running'
+                      )
+                    ORDER BY q.queue_sequence, q.task_id
+                    LIMIT 1
+                    """
+                ).fetchone()
+                if selected is None:
+                    connection.execute("COMMIT")
+                    return None
+                if len(selected) != 1 or not _matches(
+                    selected[0], _TASK_ID_PATTERN
+                ):
+                    raise StateError()
+                task_id = selected[0]
+                current_row = connection.execute(
+                    "SELECT status FROM tasks WHERE task_id = ?", (task_id,)
+                ).fetchone()
+                if (
+                    current_row is None
+                    or len(current_row) != 1
+                    or type(current_row[0]) is not str
+                ):
+                    raise StateError()
+                try:
+                    current_status = TaskStatus(current_row[0])
+                except ValueError:
+                    raise StateError() from None
+                validate_claim_transition(current_status)
+                updated = connection.execute(
+                    """
+                    UPDATE tasks
+                    SET status = 'running', reason_code = NULL, updated_at = ?
+                    WHERE task_id = ? AND status = 'queued'
+                    """,
+                    (occurred_at, task_id),
+                )
+                if updated.rowcount != 1:
+                    raise StateTransitionConflict()
+                connection.execute(
+                    """
+                    INSERT INTO task_events (
+                        event_id, task_id, previous_status, next_status,
+                        reason_code, actor_ref, occurred_at
+                    ) VALUES (?, ?, 'queued', 'running', NULL, ?, ?)
+                    """,
+                    (event_id, task_id, actor_ref, occurred_at),
+                )
+                row = connection.execute(
+                    f"SELECT {_TASK_COLUMNS} FROM tasks WHERE task_id = ?",
+                    (task_id,),
+                ).fetchone()
+                if row is None:
+                    raise StateError()
+                snapshot = _snapshot_from_row(row)
+                connection.execute("COMMIT")
+                return snapshot
+            except (InvalidTaskTransition, StateTransitionConflict):
+                _rollback_transaction(connection)
+                raise
+            except StateError:
+                _rollback_transaction(connection)
+                raise
+            except Exception:
+                _rollback_transaction(connection)
                 raise StateError() from None
 
     def reconcile_running(
