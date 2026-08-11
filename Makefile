@@ -8,7 +8,7 @@ help:
 	@printf '%s\n' 'make setup      Create .venv and install development dependencies.'
 	@printf '%s\n' 'make test       Run Python tests.'
 	@printf '%s\n' 'make contracts  Validate public files and secret patterns.'
-	@printf '%s\n' 'make validate   Run contracts, tests, Environment validation, and noop planning evidence.'
+	@printf '%s\n' 'make validate   Run contracts, tests, configuration, planning, and controller evidence.'
 	@printf '%s\n' 'make package    Build source and wheel distributions.'
 
 setup:

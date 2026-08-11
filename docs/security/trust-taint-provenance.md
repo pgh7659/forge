@@ -4,8 +4,17 @@
 
 This document defines the chosen, runtime-neutral contract semantics adopted by
 ADR-0007. The semantics are normative for future Forge implementation.
-Versioned schemas, validators, policy engines, adapters, and host enforcement
-are proposed and are not implemented by this documentation change.
+Broader versioned security schemas, full validators, policy engines, adapter
+capability enforcement, and host enforcement remain proposed.
+
+Slice 3 implements structural validation and lossless preservation of the
+minimum `forge.dev/security/v1alpha1` envelope embedded in controller requests.
+It preserves unknown valid taints and encrypts request bodies at the SQLite
+storage boundary. These checks do not authenticate callers, validate
+provenance chains or attestations, increase trust, remove taint, authorize an
+effect, deliver or manage keys, isolate code, or prove runtime, host, network,
+or external-service enforcement. This narrow evidence does not implement the
+full contract described in this document.
 
 ## Contract Ownership
 
@@ -156,10 +165,13 @@ approximating them.
 
 ## Validation and Failure Semantics
 
-Future validators must check structure, supported versions, required fields,
-state transitions, provenance continuity, attestation authority, decision
-scope, and freshness. Validation errors use stable reason codes and do not
-include sensitive payloads.
+The Slice 3 controller checks the structure and supported version of only its
+minimum embedded envelope and losslessly preserves its validated values,
+including unknown valid taints. It does not validate provenance continuity,
+attestation authority, decision scope, or freshness. Future full validators
+must check those semantics as well as required fields and state transitions.
+Validation errors use stable reason codes and do not include sensitive
+payloads.
 
 For a privileged sink:
 
@@ -190,6 +202,10 @@ The arrow from policy decision to host adapter is an interface boundary, not a
 claim that enforcement already exists.
 
 ## Proposed Implementation Sequence
+
+This remains the sequence for the broader security contract. Slice 3's minimum
+embedded-envelope validator and body-encryption boundary do not complete the
+full schema, validation, policy, or enforcement steps.
 
 1. Publish machine-readable version 1 schemas and reason-code registry.
 2. Implement pure contract validators and negative fixtures.

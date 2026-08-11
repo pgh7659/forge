@@ -19,9 +19,15 @@ defaults.
 ```text
 Configuration
   -> Forge CLI
-    -> provisioner
-      -> controller
-        -> adapters
+    -> planning adapters
+
+Versioned controller protocol
+  -> in-process controller service
+    -> pure task-transition rules
+    -> request-cipher protocol
+      -> AES-256-GCM request cipher
+    -> state-ledger protocol
+      -> SQLite state adapter
 ```
 
 The configuration schema and `forge` CLI are the first executable slices.
@@ -41,10 +47,31 @@ references or detects resolved secret values in arbitrary adapter
 configuration. A Plan is private review/audit data by default, not evidence of
 deployability, safety, secret absence, or real target observation.
 
-Apply, doctor, controller/state, real adapters, `forge-ops`, OCI
-reconciliation, merge, and deployment are unimplemented or separately
-approval-gated. Each future adapter must declare its capabilities and tested
-enforcement rather than inheriting guarantees from the core.
+Slice 3 implements the strict in-process controller contract, its pure task
+transitions, and the AES-256-GCM request-body storage boundary. SQLite is the
+first single-node state adapter. The controller accepts only the versioned
+`submitRequest` and `getTask` data shapes at its library boundary; no transport
+is connected. SQLite is an injected adapter behind the state-ledger protocol,
+not a portable-core storage requirement.
+
+The controller and SQLite suites verify idempotent ingestion, atomic task
+events and transitions, configurable injected positive concurrency including
+N=2, at most one running task per repository, exclusive single-controller
+ownership, and restart reconciliation that changes `running` to
+`failed(controller_restart)` without automatic retry. The Environment schema's
+existing `spec.executor.maxConcurrency` selection is not wired into this
+controller slice. Slice 3 adds no Environment field; callers inject the
+effective positive value, and the core supplies no default. The first
+reference deployment retains its separately approved rollout value of 1 until
+executor and host acceptance; a later target of 2 requires its own reviewed
+deployment configuration.
+
+Socket, daemon, or CLI ingress; authentication and authorization; an executor;
+Codex or Hermes integration; workspaces or worktrees; secret-provider key
+delivery; approvals and policy; apply and doctor; host enforcement; deployment;
+merge; and release remain absent or separately approval-gated. Each future
+adapter must declare its capabilities and tested enforcement rather than
+inheriting guarantees from the core.
 
 ## Reference deployments
 

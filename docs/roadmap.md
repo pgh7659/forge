@@ -11,10 +11,15 @@ plan and reviewable commit or PR.
    Plan artifacts, stale-plan detection, and the exact built-in `noop+noop`
    adapter. It performs no target access or mutation; `ssh+systemd` remains
    schema-valid but planning-unavailable pending a reviewed real adapter.
-3. **Controller and state — next:** add the service protocol, SQLite ledger,
-   encryption boundary, state transitions, and restart reconciliation.
-4. **Hermes ingress reference adapter:** add capability probing, the
-   pre-dispatch plugin, Unix-socket delivery, and fail-closed `/dev plan`.
+3. **Controller and state — implemented on this feature branch:** add the
+   strict in-process service protocol, pure transitions, AES-256-GCM
+   request-body boundary, and first single-node SQLite state adapter. Tests
+   verify idempotency, atomic task events and transitions, configurable
+   injected N including N=2, repository-one scheduling, exclusive ownership,
+   and `running` to `failed(controller_restart)` reconciliation.
+4. **Hermes ingress reference adapter — next, separately design- and
+   approval-gated:** add capability probing, the pre-dispatch plugin,
+   Unix-socket delivery, and fail-closed `/dev plan`.
 5. **Codex plan reference adapter:** add read-only execution, structured
    events, suspension, resume, and no-write validation.
 6. **Ubuntu systemd provisioner:** add Ansible installation, service units,
@@ -27,8 +32,17 @@ plan and reviewable commit or PR.
    reference acceptance suite.
 
 `forge-ops` follows the published configuration contract; it is not created as
-part of the portable foundation. Apply, doctor, controller/state, real
-adapters, `forge-ops`, OCI reconciliation, merge, and deployment remain
-unimplemented or separately approval-gated. Plans are private review/audit
-data by default, and do not prove deployability, safety, secret absence, or
-real target observation.
+part of the portable foundation. The Environment schema's existing
+`spec.executor.maxConcurrency` selection is not wired into the Slice 3
+controller. Slice 3 adds no Environment field; callers inject the effective
+positive value, and the core supplies no default. The first reference rollout
+remains 1 pending separate executor and host acceptance; a later target of 2
+requires its own reviewed configuration.
+
+Socket, daemon, or CLI ingress; authentication and authorization; executors;
+Codex or Hermes integration; workspaces or worktrees; secret-provider key
+delivery; approvals and policy; apply and doctor; host enforcement; private
+`forge-ops`; OCI reconciliation; deployment; merge; and release remain absent
+or separately approval-gated. Plans are private review/audit data by default,
+and do not prove deployability, safety, secret absence, or real target
+observation.

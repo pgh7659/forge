@@ -18,15 +18,41 @@ python3 -m json.tool \
 python3 -m json.tool \
   src/forge/resources/schemas/plan-v1alpha1.schema.json >/dev/null
 
+controller_json_files=(
+  src/forge/resources/schemas/controller-command-v1alpha1.schema.json
+  src/forge/resources/schemas/controller-response-v1alpha1.schema.json
+  tests/fixtures/controller/valid-submit.json
+  tests/fixtures/controller/valid-get-task.json
+  tests/fixtures/controller/valid-submit-created-response.json
+  tests/fixtures/controller/valid-submit-replayed-response.json
+  tests/fixtures/controller/valid-get-task-response.json
+  tests/fixtures/controller/valid-error-response.json
+)
+
+for controller_json_file in "${controller_json_files[@]}"; do
+  python3 -m json.tool "$controller_json_file" >/dev/null
+done
+
 test -s pyproject.toml
 test -s examples/environments/minimal.yaml
 test -s examples/environments/noop.yaml
 
 required_files=(
   docs/adr/0009-separate-portable-core-from-deployment-profiles.md
+  docs/adr/0010-adopt-a-contract-first-single-node-controller-core.md
   docs/operations/README.md
   docs/superpowers/plans/2026-08-10-planning-client.md
+  docs/superpowers/plans/2026-08-11-controller-state.md
   docs/superpowers/specs/2026-08-10-planning-client-design.md
+  docs/superpowers/specs/2026-08-11-controller-state-design.md
+  src/forge/resources/schemas/controller-command-v1alpha1.schema.json
+  src/forge/resources/schemas/controller-response-v1alpha1.schema.json
+  tests/fixtures/controller/valid-submit.json
+  tests/fixtures/controller/valid-get-task.json
+  tests/fixtures/controller/valid-submit-created-response.json
+  tests/fixtures/controller/valid-submit-replayed-response.json
+  tests/fixtures/controller/valid-get-task-response.json
+  tests/fixtures/controller/valid-error-response.json
   docs/reference-deployments/hermes-discord-codex/README.md
   docs/reference-deployments/hermes-discord-codex/AGENTS.md
   docs/reference-deployments/hermes-discord-codex/architecture.md
@@ -74,6 +100,10 @@ done
 grep -q 'portable engineering-control framework' README.md
 grep -q 'Reference deployments' docs/architecture.md
 grep -q 'Deployment-specific rules' AGENTS.md
+grep -q 'strict in-process controller contract' docs/architecture.md
+grep -Eq 'SQLite.*state adapter' docs/architecture.md
+grep -Eq 'Controller and state.*implemented' docs/roadmap.md
+grep -q 'Structural validation is not host enforcement' SECURITY.md
 
 test ! -e prompts/hermes-ops-soul.md
 

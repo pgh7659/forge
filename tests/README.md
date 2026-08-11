@@ -17,7 +17,18 @@ required public artifacts, scans source inputs for common credential patterns,
 and runs a controlled regression proving scanner failures do not echo matched
 values. It also runs the deterministic exact built-in `noop+noop` planning
 smoke with no target access or mutation. `ssh+systemd` remains schema-valid
-but planning-unavailable until a later reviewed real adapter.
+but planning-unavailable until a later reviewed real adapter. The test suite
+also exercises the strict in-process controller contract, pure task
+transitions, AES-256-GCM request-body storage boundary, and first single-node
+SQLite state adapter.
+
+Controller coverage verifies idempotency, atomic task events and transitions,
+injected positive concurrency including N=2, one running task per repository,
+exclusive ownership, and restart reconciliation from `running` to
+`failed(controller_restart)`. `tests/wheel_controller_smoke.py` separately
+loads both schemas from an installed wheel, performs an authenticated-encryption
+round trip, and opens and closes only a synthetic temporary SQLite database.
+It makes no provider or network call.
 
 For a reproducible checkout on Python `>=3.12`, run the setup above, then:
 
@@ -27,6 +38,14 @@ For a reproducible checkout on Python `>=3.12`, run the setup above, then:
 ```
 
 The Plan output is private review/audit data by default; it does not prove
-deployability, safety, secret absence, or real target observation. Apply,
-doctor, controller/state, real adapters, `forge-ops`, OCI reconciliation,
-merge, and deployment remain unimplemented or separately approval-gated.
+deployability, safety, secret absence, or real target observation. The
+Environment schema's existing `spec.executor.maxConcurrency` selection is not
+wired into the Slice 3 controller. Slice 3 adds no Environment field; callers
+inject the effective positive value, and the core supplies no default.
+Reference rollout remains 1 pending separate executor and host acceptance; a
+later target of 2 requires reviewed deployment configuration.
+
+Socket, daemon, or CLI ingress; authentication and authorization; executors;
+Codex or Hermes integration; workspaces or worktrees; secret-provider key
+delivery; approvals and policy; apply and doctor; host enforcement; deployment;
+merge; and release remain absent or separately approval-gated.

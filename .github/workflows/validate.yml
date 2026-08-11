@@ -35,6 +35,9 @@ jobs:
           wheel-smoke/bin/pip install dist/forge_control-0.1.0.dev0-py3-none-any.whl
           wheel-smoke/bin/forge --version
           wheel-smoke/bin/forge validate --config examples/environments/minimal.yaml
+      - name: Smoke-test installed controller package
+        if: matrix.python-version == '3.12'
+        run: wheel-smoke/bin/python tests/wheel_controller_smoke.py
       - name: Smoke-test wheel planning command
         if: matrix.python-version == '3.12'
         run: wheel-smoke/bin/forge plan --config examples/environments/noop.yaml

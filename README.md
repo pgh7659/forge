@@ -9,7 +9,10 @@ than requiring one host, assistant, executor, or provider.
 The repository currently provides the constitution, runtime-neutral security
 contracts, approved portable MVP design, an installable development package,
 offline validation of the `forge.dev/v1alpha1` Environment contract, and
-deterministic planning for the exact built-in `noop+noop` adapter tuple.
+deterministic planning for the exact built-in `noop+noop` adapter tuple. It
+also provides the strict, transport-neutral in-process controller contract,
+pure task transitions, an AES-256-GCM request-body storage boundary, and the
+first single-node SQLite state adapter.
 
 ```bash
 # Python >=3.12
@@ -33,9 +36,24 @@ or work together, detect resolved secret values inside arbitrary adapter
 configuration, or establish that an environment is safe or deployable.
 
 A successful Plan is private review/audit data by default. It is not proof of
-deployability, safety, secret absence, or real target observation. Apply,
-doctor, controller/state, real adapters, `forge-ops`, OCI reconciliation,
-merge, and deployment are unimplemented or separately approval-gated.
+deployability, safety, secret absence, or real target observation.
+
+Controller tests verify idempotent ingestion, atomic task events and
+transitions, configurable injected positive concurrency including N=2, at
+most one running task per repository, exclusive SQLite ownership, and restart
+reconciliation from `running` to `failed(controller_restart)`. The core has no
+implicit `maxConcurrency` default. Slice 3 adds no Environment field and does
+not wire the existing `spec.executor.maxConcurrency` selection into the
+controller; its effective value is injected by the caller. The first reference
+deployment retains its separately approved rollout value of 1 until executor
+and host acceptance; any later target of 2 requires its own reviewed
+configuration change.
+
+This controller is an in-process library, not a service. Socket, daemon, or
+CLI ingress; caller authentication and authorization; executors; Codex or
+Hermes integration; workspaces or worktrees; secret-provider key delivery;
+approvals and policy; apply and doctor; host enforcement; deployment; merge;
+and release remain absent or separately approval-gated.
 
 ## Reference deployments
 
