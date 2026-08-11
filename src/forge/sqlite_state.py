@@ -356,6 +356,20 @@ def _validate_ingest_bundle(
     return bundle
 
 
+def _validate_event_metadata(
+    *,
+    reason_code: object,
+    actor_ref: object,
+    occurred_at: object,
+) -> None:
+    if (
+        (reason_code is not None and not _matches(reason_code, _TOKEN_PATTERN))
+        or not _matches(actor_ref, _REFERENCE_PATTERN)
+        or not _valid_timestamp(occurred_at)
+    ):
+        raise StateError()
+
+
 def _validate_event_arguments(
     *,
     reason_code: object,
@@ -363,12 +377,12 @@ def _validate_event_arguments(
     event_id: object,
     occurred_at: object,
 ) -> None:
-    if (
-        (reason_code is not None and not _matches(reason_code, _TOKEN_PATTERN))
-        or not _matches(actor_ref, _REFERENCE_PATTERN)
-        or not _matches(event_id, _EVENT_ID_PATTERN)
-        or not _valid_timestamp(occurred_at)
-    ):
+    _validate_event_metadata(
+        reason_code=reason_code,
+        actor_ref=actor_ref,
+        occurred_at=occurred_at,
+    )
+    if not _matches(event_id, _EVENT_ID_PATTERN):
         raise StateError()
 
 
@@ -698,19 +712,17 @@ def _snapshot_from_row(row: tuple[object, ...]) -> TaskSnapshot:
     if len(row) != 9:
         raise StateError()
     request_id, task_id, project_ref, repository_ref, mode, status, reason, created, updated = row
-    if not all(
-        type(value) is str
-        for value in (
-            request_id,
-            task_id,
-            project_ref,
-            repository_ref,
-            mode,
-            status,
-            created,
-            updated,
-        )
-    ) or (reason is not None and type(reason) is not str):
+    if (
+        not _matches(request_id, _REQUEST_ID_PATTERN)
+        or not _matches(task_id, _TASK_ID_PATTERN)
+        or not _matches(project_ref, _REFERENCE_PATTERN)
+        or not _matches(repository_ref, _REFERENCE_PATTERN)
+        or mode != "plan"
+        or type(status) is not str
+        or (reason is not None and not _matches(reason, _TOKEN_PATTERN))
+        or not _valid_timestamp(created)
+        or not _valid_timestamp(updated)
+    ):
         raise StateError()
     try:
         task_status = TaskStatus(status)
@@ -1033,6 +1045,8 @@ class SqliteStateLedger:
                 raise StateError() from None
 
     def get_task(self, task_id: str) -> TaskSnapshot | None:
+        if not _matches(task_id, _TASK_ID_PATTERN):
+            raise StateError()
         with self._lock:
             connection = self._active_connection()
             try:
@@ -1267,16 +1281,15 @@ class SqliteStateLedger:
         actor_ref: str,
         occurred_at: str,
     ) -> tuple[TaskSnapshot, ...]:
+        if not callable(event_id_factory):
+            raise StateError()
+        _validate_event_metadata(
+            reason_code="controller_restart",
+            actor_ref=actor_ref,
+            occurred_at=occurred_at,
+        )
         with self._lock:
             connection = self._active_connection()
-            if (
-                not callable(event_id_factory)
-                or type(actor_ref) is not str
-                or not actor_ref
-                or type(occurred_at) is not str
-                or not occurred_at
-            ):
-                raise StateError()
             try:
                 connection.execute("BEGIN IMMEDIATE")
                 rows = tuple(

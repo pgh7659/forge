@@ -54,6 +54,7 @@ SECURITY_ENVELOPE = (
 )
 ALT_SECURITY_ENVELOPE = SECURITY_ENVELOPE.replace(b'"private"', b'"internal"')
 PLAINTEXT_SENTINEL = "BODY-PLAINTEXT-SENTINEL-7f3c"
+CORRUPT_SENTINEL = "CORRUPT-DURABLE-SENTINEL-4d2e"
 
 
 def _digest(value: bytes | str) -> str:
@@ -918,6 +919,112 @@ def _decode(payload: bytes) -> dict[str, Any]:
     document = json.loads(payload)
     assert type(document) is dict
     return document
+
+
+def _ingest_one_queued_task(path: Path, number: int) -> str:
+    with SqliteStateLedger.open(
+        path, cipher=Aes256GcmRequestCipher(), key_handle=KEY
+    ) as ledger:
+        return ledger.ingest(_bundle(number)).task.task_id
+
+
+def _corrupt_task_field(
+    path: Path, task_id: str, field: str, value: str
+) -> None:
+    allowed_fields = {
+        "request_id",
+        "task_id",
+        "project_ref",
+        "repository_ref",
+        "mode",
+        "status",
+        "reason_code",
+        "created_at",
+        "updated_at",
+    }
+    assert field in allowed_fields
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute("PRAGMA ignore_check_constraints=ON")
+        cursor = connection.execute(
+            f'UPDATE tasks SET "{field}" = ? WHERE task_id = ?',
+            (value, task_id),
+        )
+        assert cursor.rowcount == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("request_id", f"req_invalid-{CORRUPT_SENTINEL}"),
+        ("project_ref", f"project:example\n{CORRUPT_SENTINEL}"),
+        ("repository_ref", f"repository:example\n{CORRUPT_SENTINEL}"),
+        ("mode", f"apply-{CORRUPT_SENTINEL}"),
+        ("status", f"corrupt-{CORRUPT_SENTINEL}"),
+        ("reason_code", f"controller_restart\n{CORRUPT_SENTINEL}"),
+        ("created_at", f"2026-99-11T00:00:01Z-{CORRUPT_SENTINEL}"),
+        ("updated_at", f"2026-08-11T00:00:01+00:00-{CORRUPT_SENTINEL}"),
+    ),
+)
+def test_corrupted_durable_snapshot_fields_map_to_redacted_state_error(
+    tmp_path: Path,
+    field: str,
+    value: str,
+) -> None:
+    path = tmp_path / "state.db"
+    task_id = _ingest_one_queued_task(path, 80_000)
+    _corrupt_task_field(path, task_id, field, value)
+    ledger = SqliteStateLedger.open(
+        path, cipher=Aes256GcmRequestCipher(), key_handle=KEY
+    )
+    service = start_controller(
+        ledger=ledger,
+        cipher=Aes256GcmRequestCipher(),
+        key_handle=KEY,
+        max_concurrency=1,
+        clock=_FixedClock(),
+        ids=_SequenceIds(),
+    )
+    try:
+        response = service.handle(_get_payload(task_id))
+    finally:
+        service.close()
+
+    assert _decode(response) == {
+        "protocolVersion": CONTROLLER_PROTOCOL_VERSION,
+        "operation": "getTask",
+        "ok": False,
+        "error": {"code": "state_error", "message": "state operation failed"},
+    }
+    assert CORRUPT_SENTINEL.encode("utf-8") not in response
+
+
+def test_corrupted_task_id_is_not_queryable_or_schedulable(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "state.db"
+    original_task_id = _ingest_one_queued_task(path, 80_001)
+    corrupt_task_id = f"tsk_invalid-{CORRUPT_SENTINEL}"
+    _corrupt_task_field(path, original_task_id, "task_id", corrupt_task_id)
+    before = _domain_snapshot(path)
+
+    ledger = SqliteStateLedger.open(
+        path, cipher=Aes256GcmRequestCipher(), key_handle=KEY
+    )
+    assert ledger.get_task(original_task_id) is None
+    with pytest.raises(StateError, match=r"^state operation failed$") as queried:
+        ledger.get_task(corrupt_task_id)
+    with pytest.raises(StateError, match=r"^state operation failed$") as scheduled:
+        ledger.claim_next_eligible(
+            max_concurrency=1,
+            actor_ref="executor:synthetic",
+            event_id=f"evt_{80_001:032x}",
+            occurred_at="2026-08-11T00:00:02Z",
+        )
+    ledger.close()
+
+    assert CORRUPT_SENTINEL not in str(queried.value)
+    assert CORRUPT_SENTINEL not in str(scheduled.value)
+    assert _domain_snapshot(path) == before
 
 
 def _state_file_contents(path: Path) -> tuple[bytes, ...]:

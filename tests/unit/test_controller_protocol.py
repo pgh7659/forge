@@ -4,9 +4,11 @@ import hashlib
 import json
 from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime, timedelta, timezone
+from importlib.resources import files
 from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
 
 import forge.controller_protocol as protocol
 from forge.controller_protocol import (
@@ -38,6 +40,7 @@ FIXTURES = Path(__file__).parents[1] / "fixtures" / "controller"
 BODY = "Review the synthetic change and produce a plan."
 TASK_ID = "tsk_" + "a" * 32
 REQUEST_ID = "req_" + "b" * 32
+LINE_TERMINATORS = ("\n", "\r", "\u2028", "\u2029")
 
 INVALID_BYTES = (
     b"",
@@ -138,6 +141,161 @@ def remove(document: dict[str, object], path: tuple[str, ...]) -> dict[str, obje
         cursor = cursor[part]
     del cursor[path[-1]]
     return copied
+
+
+def command_schema_validator() -> Draft202012Validator:
+    resource = files("forge").joinpath(
+        "resources/schemas/controller-command-v1alpha1.schema.json"
+    )
+    return Draft202012Validator(json.loads(resource.read_text(encoding="utf-8")))
+
+
+def response_schema_validator() -> Draft202012Validator:
+    resource = files("forge").joinpath(
+        "resources/schemas/controller-response-v1alpha1.schema.json"
+    )
+    return Draft202012Validator(json.loads(resource.read_text(encoding="utf-8")))
+
+
+COMMAND_PATTERN_FIELDS = (
+    (("request", "sourceNamespace"), ControllerOperation.SUBMIT_REQUEST),
+    (("request", "sourceEventId"), ControllerOperation.SUBMIT_REQUEST),
+    (("request", "sourceEventTime"), ControllerOperation.SUBMIT_REQUEST),
+    (("request", "actorRef"), ControllerOperation.SUBMIT_REQUEST),
+    (("request", "channelRef"), ControllerOperation.SUBMIT_REQUEST),
+    (("request", "projectRef"), ControllerOperation.SUBMIT_REQUEST),
+    (("request", "repositoryRef"), ControllerOperation.SUBMIT_REQUEST),
+    (("request", "security", "objectId"), ControllerOperation.SUBMIT_REQUEST),
+    (("request", "security", "objectType"), ControllerOperation.SUBMIT_REQUEST),
+    (("request", "security", "createdAt"), ControllerOperation.SUBMIT_REQUEST),
+    (("request", "security", "taint", "0"), ControllerOperation.SUBMIT_REQUEST),
+    (("request", "security", "provenanceRef"), ControllerOperation.SUBMIT_REQUEST),
+    (("request", "security", "producerClass"), ControllerOperation.SUBMIT_REQUEST),
+    (("request", "security", "classification"), ControllerOperation.SUBMIT_REQUEST),
+    (("request", "security", "retentionHint"), ControllerOperation.SUBMIT_REQUEST),
+    (("taskId",), ControllerOperation.GET_TASK),
+)
+
+
+def command_with_terminated_field(
+    path: tuple[str, ...], terminator: str
+) -> dict[str, object]:
+    document = (
+        fixture_document("valid-get-task.json")
+        if path == ("taskId",)
+        else valid_submission()
+    )
+    copied = json.loads(json.dumps(document))
+    cursor: object = copied
+    for part in path[:-1]:
+        if type(cursor) is list:
+            cursor = cursor[int(part)]
+        else:
+            assert type(cursor) is dict
+            cursor = cursor[part]
+    if type(cursor) is list:
+        index = int(path[-1])
+        value = cursor[index]
+        assert type(value) is str
+        cursor[index] = value + terminator
+    else:
+        assert type(cursor) is dict
+        value = cursor[path[-1]]
+        assert type(value) is str
+        cursor[path[-1]] = value + terminator
+    return copied
+
+
+@pytest.mark.parametrize(("path", "operation"), COMMAND_PATTERN_FIELDS)
+@pytest.mark.parametrize("terminator", LINE_TERMINATORS)
+def test_packaged_command_schema_rejects_trailing_line_terminators(
+    path: tuple[str, ...],
+    operation: ControllerOperation,
+    terminator: str,
+) -> None:
+    document = command_with_terminated_field(path, terminator)
+
+    assert list(command_schema_validator().iter_errors(document)), (
+        path,
+        operation,
+        repr(terminator),
+    )
+
+
+@pytest.mark.parametrize(("path", "operation"), COMMAND_PATTERN_FIELDS)
+@pytest.mark.parametrize("terminator", LINE_TERMINATORS)
+def test_parse_command_rejects_trailing_line_terminators_in_pattern_fields(
+    path: tuple[str, ...],
+    operation: ControllerOperation,
+    terminator: str,
+) -> None:
+    with pytest.raises(ProtocolError) as raised:
+        parse_command(encode_command(command_with_terminated_field(path, terminator)))
+
+    assert raised.value.code is ErrorCode.INVALID_REQUEST
+    assert raised.value.operation is operation
+
+
+class _PermissiveValidator:
+    def iter_errors(self, document: object) -> tuple[object, ...]:
+        return ()
+
+
+@pytest.mark.parametrize(("path", "operation"), COMMAND_PATTERN_FIELDS)
+def test_parse_command_semantics_reject_trailing_newline_without_schema_help(
+    monkeypatch: pytest.MonkeyPatch,
+    path: tuple[str, ...],
+    operation: ControllerOperation,
+) -> None:
+    monkeypatch.setattr(protocol, "_command_validator", _PermissiveValidator)
+
+    with pytest.raises(ProtocolError) as raised:
+        parse_command(encode_command(command_with_terminated_field(path, "\n")))
+
+    assert raised.value.code is ErrorCode.INVALID_REQUEST
+    assert raised.value.operation is operation
+
+
+RESPONSE_PATTERN_FIELDS = (
+    ("valid-submit-created-response.json", ("result", "requestId")),
+    ("valid-submit-created-response.json", ("result", "taskId")),
+    ("valid-get-task-response.json", ("result", "requestId")),
+    ("valid-get-task-response.json", ("result", "taskId")),
+    ("valid-get-task-response.json", ("result", "reasonCode")),
+    ("valid-get-task-response.json", ("result", "createdAt")),
+    ("valid-get-task-response.json", ("result", "updatedAt")),
+)
+
+
+def response_with_terminated_field(
+    fixture: str, path: tuple[str, ...], terminator: str
+) -> dict[str, object]:
+    document = fixture_document(fixture)
+    cursor = document
+    for part in path[:-1]:
+        value = cursor[part]
+        assert type(value) is dict
+        cursor = value
+    baseline = "controller_restart" if path[-1] == "reasonCode" else cursor[path[-1]]
+    assert type(baseline) is str
+    cursor[path[-1]] = baseline + terminator
+    return document
+
+
+@pytest.mark.parametrize(("fixture", "path"), RESPONSE_PATTERN_FIELDS)
+@pytest.mark.parametrize("terminator", LINE_TERMINATORS)
+def test_packaged_response_schema_rejects_trailing_line_terminators(
+    fixture: str,
+    path: tuple[str, ...],
+    terminator: str,
+) -> None:
+    document = response_with_terminated_field(fixture, path, terminator)
+
+    assert list(response_schema_validator().iter_errors(document)), (
+        fixture,
+        path,
+        repr(terminator),
+    )
 
 
 @pytest.mark.parametrize(
@@ -320,3 +478,145 @@ def test_encoders_match_fixtures_and_exclude_sensitive_data() -> None:
             "details",
         ):
             assert sensitive_key not in serialized
+
+
+@pytest.mark.parametrize("field", ("request_id", "task_id"))
+@pytest.mark.parametrize("terminator", LINE_TERMINATORS)
+def test_submit_encoder_rejects_trailing_line_terminators_in_ids(
+    field: str, terminator: str
+) -> None:
+    values = {"request_id": REQUEST_ID, "task_id": TASK_ID}
+    values[field] += terminator
+    result = SubmitResult(
+        values["request_id"],
+        values["task_id"],
+        TaskStatus.QUEUED,
+        Disposition.CREATED,
+    )
+
+    with pytest.raises(
+        ValueError, match=r"^response does not satisfy the controller contract$"
+    ):
+        encode_submit_success(result)
+
+
+@pytest.mark.parametrize("field", ("request_id", "task_id", "reason_code"))
+@pytest.mark.parametrize("terminator", LINE_TERMINATORS)
+def test_task_encoder_rejects_trailing_line_terminators_in_pattern_fields(
+    field: str, terminator: str
+) -> None:
+    values: dict[str, str | None] = {
+        "request_id": REQUEST_ID,
+        "task_id": TASK_ID,
+        "reason_code": "controller_restart",
+    }
+    value = values[field]
+    assert type(value) is str
+    values[field] = value + terminator
+    result = TaskInspectionResult(
+        request_id=values["request_id"],  # type: ignore[arg-type]
+        task_id=values["task_id"],  # type: ignore[arg-type]
+        mode="plan",
+        status=TaskStatus.FAILED,
+        reason_code=values["reason_code"],
+        created_at=datetime(2026, 8, 11, 0, 0, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 8, 11, 0, 0, 1, tzinfo=UTC),
+    )
+
+    with pytest.raises(
+        ValueError, match=r"^response does not satisfy the controller contract$"
+    ):
+        encode_task_success(result)
+
+
+def test_task_encoder_rejects_trailing_newline_in_formatted_timestamps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        protocol,
+        "format_utc_timestamp",
+        lambda value: "2026-08-11T00:00:01Z\n",
+    )
+    result = TaskInspectionResult(
+        request_id=REQUEST_ID,
+        task_id=TASK_ID,
+        mode="plan",
+        status=TaskStatus.QUEUED,
+        reason_code=None,
+        created_at=datetime(2026, 8, 11, 0, 0, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 8, 11, 0, 0, 1, tzinfo=UTC),
+    )
+
+    with pytest.raises(
+        ValueError, match=r"^response does not satisfy the controller contract$"
+    ):
+        encode_task_success(result)
+
+
+@pytest.mark.parametrize("encoder", ("submit-request-id", "submit-task-id", "task-reason"))
+def test_response_semantics_reject_trailing_newline_without_schema_help(
+    monkeypatch: pytest.MonkeyPatch, encoder: str
+) -> None:
+    monkeypatch.setattr(protocol, "_response_validator", _PermissiveValidator)
+
+    if encoder == "submit-request-id":
+        call = lambda: encode_submit_success(
+            SubmitResult(
+                REQUEST_ID + "\n",
+                TASK_ID,
+                TaskStatus.QUEUED,
+                Disposition.CREATED,
+            )
+        )
+    elif encoder == "submit-task-id":
+        call = lambda: encode_submit_success(
+            SubmitResult(
+                REQUEST_ID,
+                TASK_ID + "\n",
+                TaskStatus.QUEUED,
+                Disposition.CREATED,
+            )
+        )
+    else:
+        call = lambda: encode_task_success(
+            TaskInspectionResult(
+                request_id=REQUEST_ID,
+                task_id=TASK_ID,
+                mode="plan",
+                status=TaskStatus.FAILED,
+                reason_code="controller_restart\n",
+                created_at=datetime(2026, 8, 11, 0, 0, 1, tzinfo=UTC),
+                updated_at=datetime(2026, 8, 11, 0, 0, 1, tzinfo=UTC),
+            )
+        )
+
+    with pytest.raises(
+        ValueError, match=r"^response does not satisfy the controller contract$"
+    ):
+        call()
+
+
+def test_response_timestamp_semantics_reject_trailing_newline_without_schema_help(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(protocol, "_response_validator", _PermissiveValidator)
+    monkeypatch.setattr(
+        protocol,
+        "format_utc_timestamp",
+        lambda value: "2026-08-11T00:00:01Z\n",
+    )
+
+    with pytest.raises(
+        ValueError, match=r"^response does not satisfy the controller contract$"
+    ):
+        encode_task_success(
+            TaskInspectionResult(
+                request_id=REQUEST_ID,
+                task_id=TASK_ID,
+                mode="plan",
+                status=TaskStatus.QUEUED,
+                reason_code=None,
+                created_at=datetime(2026, 8, 11, 0, 0, 1, tzinfo=UTC),
+                updated_at=datetime(2026, 8, 11, 0, 0, 1, tzinfo=UTC),
+            )
+        )

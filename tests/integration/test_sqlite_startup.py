@@ -850,6 +850,86 @@ def _event_id_iterator(values: list[str]) -> Callable[[], str]:
     return iterator.__next__
 
 
+@pytest.mark.parametrize(
+    ("actor_ref", "occurred_at"),
+    (
+        (
+            "controller:startup\nCORRUPT-RECONCILE-ACTOR-8b3f",
+            OCCURRED_AT,
+        ),
+        (
+            "controller:startup",
+            "2026-99-11T00:00:02Z-CORRUPT-RECONCILE-TIME-8b3f",
+        ),
+        (
+            "controller:startup",
+            "2026-08-11T00:00:02+00:00",
+        ),
+    ),
+)
+def test_reconcile_rejects_malformed_event_metadata_before_transaction(
+    tmp_path: Path,
+    actor_ref: str,
+    occurred_at: str,
+) -> None:
+    path = tmp_path / "state.db"
+    _create_database(path)
+    _seed_tasks(path, [TaskStatus.RUNNING])
+    before = _domain_rows(path)
+    callback_calls = 0
+
+    def event_id_factory() -> str:
+        nonlocal callback_calls
+        callback_calls += 1
+        return f"evt_{500:032x}"
+
+    with SqliteStateLedger.open(
+        path, cipher=Aes256GcmRequestCipher(), key_handle=KEY
+    ) as ledger:
+        connection = ledger._active_connection()
+        statements: list[str] = []
+        connection.set_trace_callback(statements.append)
+        with pytest.raises(StateError, match=r"^state operation failed$") as raised:
+            ledger.reconcile_running(
+                event_id_factory=event_id_factory,
+                actor_ref=actor_ref,
+                occurred_at=occurred_at,
+            )
+        connection.set_trace_callback(None)
+
+    assert callback_calls == 0
+    assert not any(statement.casefold().startswith("begin") for statement in statements)
+    assert not any(statement.casefold().startswith("rollback") for statement in statements)
+    assert "CORRUPT-RECONCILE" not in str(raised.value)
+    assert _domain_rows(path) == before
+
+
+def test_reconcile_event_id_factory_runs_inside_atomic_transaction(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "state.db"
+    _create_database(path)
+    _seed_tasks(path, [TaskStatus.RUNNING])
+
+    with SqliteStateLedger.open(
+        path, cipher=Aes256GcmRequestCipher(), key_handle=KEY
+    ) as ledger:
+        connection = ledger._active_connection()
+
+        def event_id_factory() -> str:
+            assert connection.in_transaction
+            return f"evt_{501:032x}"
+
+        changed = ledger.reconcile_running(
+            event_id_factory=event_id_factory,
+            actor_ref="controller:startup",
+            occurred_at=OCCURRED_AT,
+        )
+
+    assert len(changed) == 1
+    assert changed[0].status is TaskStatus.FAILED
+
+
 def test_reconcile_running_atomically_fails_only_running_tasks(tmp_path: Path) -> None:
     path = tmp_path / "state.db"
     _create_database(path)

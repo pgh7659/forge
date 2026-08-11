@@ -26,6 +26,7 @@ from forge.controller_protocol import (
     request_digest,
     security_digest,
     security_document,
+    validate_command,
 )
 from forge.request_crypto import (
     EncryptionError,
@@ -176,6 +177,9 @@ class ControllerService:
 
     def submit_request(self, command: SubmitRequestCommand) -> SubmitResult:
         with self._lock:
+            validate_command(
+                command, expected_operation=ControllerOperation.SUBMIT_REQUEST
+            )
             self._require_ready()
             occurred_at = format_utc_timestamp(self._clock.now())
             request = command.request
@@ -254,6 +258,7 @@ class ControllerService:
 
     def get_task(self, command: GetTaskCommand) -> TaskInspectionResult:
         with self._lock:
+            validate_command(command, expected_operation=ControllerOperation.GET_TASK)
             self._require_ready()
             task = self._ledger.get_task(command.task_id)
             if task is None:

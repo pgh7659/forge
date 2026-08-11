@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -17,6 +18,15 @@ from forge.task_state import TaskStatus
 CONTROLLER_PROTOCOL_VERSION = "forge.dev/controller/v1alpha1"
 SECURITY_CONTRACT_VERSION = "forge.dev/security/v1alpha1"
 MAX_COMMAND_BYTES = 262_144
+
+_REFERENCE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}")
+_TOKEN_PATTERN = re.compile(r"[a-z][a-z0-9._:-]{0,127}")
+_REQUEST_ID_PATTERN = re.compile(r"req_[0-9a-f]{32}")
+_TASK_ID_PATTERN = re.compile(r"tsk_[0-9a-f]{32}")
+_TIMESTAMP_PATTERN = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]{1,6})?Z"
+)
 
 
 class ControllerOperation(StrEnum):
@@ -178,9 +188,16 @@ def _operation(document: object) -> ControllerOperation | None:
         return None
 
 
-def _validate_timestamp(value: str) -> None:
+def _require_fullmatch(value: object, pattern: re.Pattern[str]) -> str:
+    if type(value) is not str or pattern.fullmatch(value) is None:
+        raise ValueError("value does not satisfy the controller contract")
+    return value
+
+
+def _validate_timestamp(value: object) -> None:
+    rendered = _require_fullmatch(value, _TIMESTAMP_PATTERN)
     try:
-        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+        parsed = datetime.fromisoformat(rendered[:-1] + "+00:00")
     except (TypeError, ValueError) as exc:
         raise ValueError("invalid UTC timestamp") from exc
     if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0):
@@ -189,17 +206,73 @@ def _validate_timestamp(value: str) -> None:
 
 def _validate_command_semantics(document: dict[str, object], operation: ControllerOperation) -> None:
     if operation is ControllerOperation.GET_TASK:
+        _require_fullmatch(document.get("taskId"), _TASK_ID_PATTERN)
         return
-    request = document["request"]
-    assert type(request) is dict
-    security = request["security"]
-    assert type(security) is dict
-    _validate_timestamp(request["sourceEventTime"])
-    _validate_timestamp(security["createdAt"])
-    taint = security["taint"]
-    assert type(taint) is list
-    if tuple(sorted(taint)) != tuple(taint):
+    request = document.get("request")
+    if type(request) is not dict:
+        raise ValueError("request does not satisfy the controller contract")
+    security = request.get("security")
+    if type(security) is not dict:
+        raise ValueError("request does not satisfy the controller contract")
+
+    for field in ("sourceEventId", "actorRef", "channelRef", "projectRef", "repositoryRef"):
+        _require_fullmatch(request.get(field), _REFERENCE_PATTERN)
+    for field in ("objectId", "provenanceRef"):
+        _require_fullmatch(security.get(field), _REFERENCE_PATTERN)
+    _require_fullmatch(request.get("sourceNamespace"), _TOKEN_PATTERN)
+    for field in ("objectType", "producerClass", "classification", "retentionHint"):
+        _require_fullmatch(security.get(field), _TOKEN_PATTERN)
+    _validate_timestamp(request.get("sourceEventTime"))
+    _validate_timestamp(security.get("createdAt"))
+
+    taint = security.get("taint")
+    if type(taint) is not list:
+        raise ValueError("request does not satisfy the controller contract")
+    for value in taint:
+        _require_fullmatch(value, _TOKEN_PATTERN)
+    if len(set(taint)) != len(taint) or tuple(sorted(taint)) != tuple(taint):
         raise _invalid(operation)
+
+
+def _validate_response_semantics(document: dict[str, object]) -> None:
+    result = document.get("result")
+    if result is None:
+        return
+    if type(result) is not dict:
+        raise ValueError("response does not satisfy the controller contract")
+    _require_fullmatch(result.get("requestId"), _REQUEST_ID_PATTERN)
+    _require_fullmatch(result.get("taskId"), _TASK_ID_PATTERN)
+    if document.get("operation") == ControllerOperation.GET_TASK.value:
+        reason = result.get("reasonCode")
+        if reason is not None:
+            _require_fullmatch(reason, _TOKEN_PATTERN)
+        _validate_timestamp(result.get("createdAt"))
+        _validate_timestamp(result.get("updatedAt"))
+
+
+def _validate_command_document(
+    document: dict[str, object], operation: ControllerOperation
+) -> None:
+    try:
+        canonical_json_bytes(document)
+    except (CanonicalizationError, TypeError, ValueError, RecursionError) as exc:
+        raise _invalid(operation) from exc
+    if document.get("protocolVersion") != CONTROLLER_PROTOCOL_VERSION:
+        if type(document.get("protocolVersion")) is str:
+            raise ProtocolError(
+                ErrorCode.UNSUPPORTED_PROTOCOL,
+                PUBLIC_ERROR_MESSAGES[ErrorCode.UNSUPPORTED_PROTOCOL],
+                operation,
+            )
+        raise _invalid(operation)
+    try:
+        if any(_command_validator().iter_errors(document)):
+            raise _invalid(operation)
+        _validate_command_semantics(document, operation)
+    except ProtocolError:
+        raise
+    except (KeyError, TypeError, ValueError, RecursionError) as exc:
+        raise _invalid(operation) from exc
 
 
 def parse_command(payload: bytes) -> SubmitRequestCommand | GetTaskCommand:
@@ -227,29 +300,9 @@ def parse_command(payload: bytes) -> SubmitRequestCommand | GetTaskCommand:
     if type(parsed) is not dict:
         raise _invalid()
     operation = _operation(parsed)
-    try:
-        canonical_json_bytes(parsed)
-    except (CanonicalizationError, TypeError, ValueError, RecursionError) as exc:
-        raise _invalid(operation) from exc
     if operation is None:
         raise _invalid()
-    if parsed.get("protocolVersion") != CONTROLLER_PROTOCOL_VERSION:
-        if type(parsed.get("protocolVersion")) is str:
-            raise ProtocolError(
-                ErrorCode.UNSUPPORTED_PROTOCOL,
-                PUBLIC_ERROR_MESSAGES[ErrorCode.UNSUPPORTED_PROTOCOL],
-                operation,
-            )
-        raise _invalid(operation)
-
-    try:
-        if any(_command_validator().iter_errors(parsed)):
-            raise _invalid(operation)
-        _validate_command_semantics(parsed, operation)
-    except ProtocolError:
-        raise
-    except (KeyError, TypeError, ValueError, RecursionError) as exc:
-        raise _invalid(operation) from exc
+    _validate_command_document(parsed, operation)
 
     if operation is ControllerOperation.GET_TASK:
         task_id = parsed["taskId"]
@@ -287,6 +340,46 @@ def parse_command(payload: bytes) -> SubmitRequestCommand | GetTaskCommand:
             ),
         )
     )
+
+
+def validate_command(
+    command: object,
+    *,
+    expected_operation: ControllerOperation | None = None,
+) -> SubmitRequestCommand | GetTaskCommand:
+    operation: ControllerOperation | None = None
+    try:
+        if type(command) is SubmitRequestCommand:
+            operation = ControllerOperation.SUBMIT_REQUEST
+            if (
+                type(command.request) is not EngineeringRequest
+                or type(command.request.security) is not SecurityEnvelope
+                or type(command.request.security.taint) is not tuple
+            ):
+                raise _invalid(operation)
+            document = {
+                "protocolVersion": CONTROLLER_PROTOCOL_VERSION,
+                "operation": operation.value,
+                "request": request_document(command.request),
+            }
+        elif type(command) is GetTaskCommand:
+            operation = ControllerOperation.GET_TASK
+            document = {
+                "protocolVersion": CONTROLLER_PROTOCOL_VERSION,
+                "operation": operation.value,
+                "taskId": command.task_id,
+            }
+        else:
+            raise _invalid(expected_operation)
+        if expected_operation is not None and operation is not expected_operation:
+            raise _invalid(expected_operation)
+    except ProtocolError:
+        raise
+    except (AttributeError, TypeError, ValueError, RecursionError) as exc:
+        raise _invalid(expected_operation or operation) from exc
+
+    _validate_command_document(document, operation)
+    return command
 
 
 def security_document(envelope: SecurityEnvelope) -> dict[str, object]:
@@ -348,10 +441,11 @@ def format_utc_timestamp(value: datetime) -> str:
 
 def _encode_response(document: dict[str, object]) -> bytes:
     try:
+        _validate_response_semantics(document)
         if any(_response_validator().iter_errors(document)):
             raise ValueError("response does not satisfy the controller contract")
         return canonical_json_bytes(document)
-    except (CanonicalizationError, TypeError, ValueError, RecursionError) as exc:
+    except (CanonicalizationError, KeyError, TypeError, ValueError, RecursionError) as exc:
         if str(exc) == "response does not satisfy the controller contract":
             raise
         raise ValueError("response does not satisfy the controller contract") from exc

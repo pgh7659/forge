@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Callable
-from dataclasses import FrozenInstanceError, fields
+from dataclasses import FrozenInstanceError, fields, replace
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -18,8 +18,10 @@ from forge.controller import (
 )
 from forge.controller_protocol import (
     CONTROLLER_PROTOCOL_VERSION,
+    ControllerOperation,
     ErrorCode,
     GetTaskCommand,
+    ProtocolError,
     SubmitRequestCommand,
     TaskInspectionResult,
     parse_command,
@@ -97,11 +99,15 @@ class FixedClock:
 class SequenceIds:
     def __init__(self) -> None:
         self.event_number = 0
+        self.request_calls = 0
+        self.task_calls = 0
 
     def new_request_id(self) -> str:
+        self.request_calls += 1
         return GENERATED_REQUEST_ID
 
     def new_task_id(self) -> str:
+        self.task_calls += 1
         return GENERATED_TASK_ID
 
     def new_event_id(self) -> str:
@@ -245,6 +251,7 @@ def started(
     *,
     max_concurrency: int = 2,
     ids: SequenceIds | None = None,
+    clock: FixedClock | None = None,
 ) -> tuple[ControllerService, RecordingLedger, RecordingCipher, SequenceIds]:
     actual_ledger = RecordingLedger() if ledger is None else ledger
     actual_cipher = RecordingCipher() if cipher is None else cipher
@@ -254,7 +261,7 @@ def started(
         cipher=actual_cipher,
         key_handle=KEY,
         max_concurrency=max_concurrency,
-        clock=FixedClock(),
+        clock=FixedClock() if clock is None else clock,
         ids=actual_ids,
     )
     return service, actual_ledger, actual_cipher, actual_ids
@@ -515,6 +522,134 @@ def test_identical_replay_returns_only_existing_durable_ids() -> None:
     assert GENERATED_REQUEST_ID.encode() not in response
     assert GENERATED_TASK_ID.encode() not in response
     assert b"CCCC" not in response
+
+
+class CountingClock(FixedClock):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def now(self) -> datetime:
+        self.calls += 1
+        return super().now()
+
+
+def invalid_direct_submit(case: str) -> SubmitRequestCommand:
+    command = parse_command(fixture_bytes("valid-submit.json"))
+    assert isinstance(command, SubmitRequestCommand)
+    request = command.request
+    security = request.security
+    if case == "security-version":
+        security = replace(security, contract_version="forge.dev/security/v2")
+    elif case == "trust":
+        security = replace(security, trust="approved")
+    elif case == "taint-token":
+        security = replace(security, taint=("external-input\n",))
+    elif case == "taint-shape":
+        security = replace(security, taint=["external-input"])  # type: ignore[arg-type]
+    elif case == "body-bound":
+        request = replace(request, body="x" * 65_537)
+    elif case == "timestamp":
+        request = replace(request, source_event_time="2026-99-11T00:00:00Z")
+    elif case == "mode":
+        request = replace(request, mode="apply")
+    elif case == "reference":
+        request = replace(request, repository_ref="repository:example\n")
+    else:  # pragma: no cover - the parametrization is the complete caller
+        raise AssertionError("unknown invalid direct-submit case")
+    return SubmitRequestCommand(replace(request, security=security))
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "security-version",
+        "trust",
+        "taint-token",
+        "taint-shape",
+        "body-bound",
+        "timestamp",
+        "mode",
+        "reference",
+    ),
+)
+def test_direct_submit_revalidates_complete_command_before_any_side_effect(
+    case: str,
+) -> None:
+    clock = CountingClock()
+    ids = SequenceIds()
+    service, ledger, cipher, _ = started(ids=ids, clock=clock)
+    ledger.calls.clear()
+    cipher.encrypt_calls.clear()
+    before = (clock.calls, ids.request_calls, ids.task_calls, ids.event_number)
+
+    with pytest.raises(ProtocolError) as raised:
+        service.submit_request(invalid_direct_submit(case))
+
+    assert raised.value.code is ErrorCode.INVALID_REQUEST
+    assert raised.value.operation is ControllerOperation.SUBMIT_REQUEST
+    assert str(raised.value) == "request does not satisfy the controller contract"
+    assert (clock.calls, ids.request_calls, ids.task_calls, ids.event_number) == before
+    assert cipher.encrypt_calls == []
+    assert ledger.calls == []
+
+
+@pytest.mark.parametrize(
+    "task_id",
+    (
+        "tsk_not-hex",
+        GENERATED_TASK_ID + "\n",
+    ),
+)
+def test_direct_get_task_revalidates_task_id_before_ledger_access(
+    task_id: str,
+) -> None:
+    service, ledger, cipher, ids = started()
+    ledger.calls.clear()
+    before = (ids.request_calls, ids.task_calls, ids.event_number)
+
+    with pytest.raises(ProtocolError) as raised:
+        service.get_task(GetTaskCommand(task_id))
+
+    assert raised.value.code is ErrorCode.INVALID_REQUEST
+    assert raised.value.operation is ControllerOperation.GET_TASK
+    assert str(raised.value) == "request does not satisfy the controller contract"
+    assert (ids.request_calls, ids.task_calls, ids.event_number) == before
+    assert cipher.encrypt_calls == []
+    assert ledger.calls == []
+
+
+@pytest.mark.parametrize(
+    ("method", "command", "operation"),
+    (
+        (
+            "submit_request",
+            GetTaskCommand(GENERATED_TASK_ID),
+            ControllerOperation.SUBMIT_REQUEST,
+        ),
+        (
+            "get_task",
+            parse_command(fixture_bytes("valid-submit.json")),
+            ControllerOperation.GET_TASK,
+        ),
+    ),
+)
+def test_direct_methods_reject_the_other_typed_operation_with_owned_error(
+    method: str,
+    command: object,
+    operation: ControllerOperation,
+) -> None:
+    service, ledger, cipher, ids = started()
+    ledger.calls.clear()
+    before = (ids.request_calls, ids.task_calls, ids.event_number)
+
+    with pytest.raises(ProtocolError) as raised:
+        getattr(service, method)(command)
+
+    assert raised.value.code is ErrorCode.INVALID_REQUEST
+    assert raised.value.operation is operation
+    assert (ids.request_calls, ids.task_calls, ids.event_number) == before
+    assert cipher.encrypt_calls == []
+    assert ledger.calls == []
 
 
 def test_get_task_returns_minimized_public_result_and_missing_maps_to_error() -> None:
