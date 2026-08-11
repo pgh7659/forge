@@ -3,8 +3,10 @@ from __future__ import annotations
 import logging
 import re
 import selectors
+import shutil
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 from collections import Counter
@@ -766,7 +768,7 @@ def _start_holder(path: Path) -> subprocess.Popen[str]:
     root = Path(__file__).parents[2]
     process = subprocess.Popen(
         [
-            str(root / ".venv" / "bin" / "python"),
+            sys.executable,
             str(root / "tests" / "helpers" / "hold_sqlite_ledger.py"),
             str(path),
         ],
@@ -788,6 +790,30 @@ def _start_holder(path: Path) -> subprocess.Popen[str]:
     finally:
         selector.close()
     return process
+
+
+def test_holder_uses_the_active_interpreter_without_a_repository_venv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_root = Path(__file__).parents[2]
+    isolated_root = tmp_path / "repository-without-venv"
+    helper_directory = isolated_root / "tests" / "helpers"
+    helper_directory.mkdir(parents=True)
+    shutil.copyfile(
+        source_root / "tests" / "helpers" / "hold_sqlite_ledger.py",
+        helper_directory / "hold_sqlite_ledger.py",
+    )
+    isolated_test = (
+        isolated_root / "tests" / "integration" / "test_sqlite_startup.py"
+    )
+    monkeypatch.setattr(sys.modules[__name__], "__file__", str(isolated_test))
+
+    process = _start_holder(tmp_path / "state.db")
+    try:
+        _stop_holder_cleanly(process)
+        assert process.returncode == 0
+    finally:
+        _terminate_holder(process)
 
 
 def _stop_holder_cleanly(process: subprocess.Popen[str]) -> None:
