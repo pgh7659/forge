@@ -489,6 +489,28 @@ def _valid_database_with_non_partial_running_index(path: Path) -> None:
     )
 
 
+def _valid_database_with_case_changed_running_index(path: Path) -> None:
+    _create_database(path)
+    _seed_tasks(path, [TaskStatus.QUEUED])
+    _rewrite_schema_sql(
+        path,
+        "ux_tasks_running_repository",
+        "status = 'running'",
+        "status = 'RUNNING'",
+    )
+
+
+def _valid_database_with_case_changed_check_literal(path: Path) -> None:
+    _create_database(path)
+    _seed_tasks(path, [TaskStatus.QUEUED])
+    _rewrite_schema_sql(
+        path,
+        "requests",
+        "mode = 'plan'",
+        "mode = 'PLAN'",
+    )
+
+
 def _valid_database_with_extra_object(path: Path) -> None:
     _create_database(path)
     _seed_tasks(path, [TaskStatus.QUEUED])
@@ -505,6 +527,8 @@ def _valid_database_with_extra_object(path: Path) -> None:
         _valid_database_with_changed_task_column,
         _valid_database_with_changed_foreign_key,
         _valid_database_with_non_partial_running_index,
+        _valid_database_with_case_changed_running_index,
+        _valid_database_with_case_changed_check_literal,
         _valid_database_with_extra_object,
     ],
     ids=[
@@ -514,6 +538,8 @@ def _valid_database_with_extra_object(path: Path) -> None:
         "changed-column",
         "changed-foreign-key",
         "non-partial-running-index",
+        "case-changed-running-index",
+        "case-changed-check-literal",
         "extra-object",
     ],
 )
@@ -544,6 +570,58 @@ class _DifferentAlgorithmCipher:
         self, value: EncryptedValue, associated_data: bytes, key: KeyHandle
     ) -> bytes:
         raise AssertionError("algorithm mismatch must fail before decryption")
+
+
+class _UnexpectedVerifierCipher:
+    algorithm = "AES-256-GCM"
+
+    def encrypt(
+        self, plaintext: bytes, associated_data: bytes, key: KeyHandle
+    ) -> EncryptedValue:
+        raise RuntimeError("unexpected-cipher-sensitive-marker")
+
+    def decrypt(
+        self, value: EncryptedValue, associated_data: bytes, key: KeyHandle
+    ) -> bytes:
+        raise AssertionError("new-database verification must not reach decryption")
+
+
+def test_open_rolls_back_closes_and_redacts_unexpected_cipher_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    path = tmp_path / "state.db"
+    real_connect, created = _patch_recording_connect(monkeypatch)
+    caplog.set_level(logging.DEBUG)
+
+    with pytest.raises(StateError, match=r"^state operation failed$") as captured:
+        SqliteStateLedger.open(
+            path,
+            cipher=_UnexpectedVerifierCipher(),
+            key_handle=KEY,
+        )
+
+    assert len(created) == 1
+    assert created[0].closed
+    assert "rollback" in created[0].statements
+    output = str(captured.value) + caplog.text
+    assert "unexpected-cipher-sensitive-marker" not in output
+    assert KEY.key_id not in output
+    assert KEY.key_bytes.hex() not in output
+    assert repr(KEY.key_bytes) not in output
+    assert str(path) not in output
+
+    from forge import sqlite_state
+
+    monkeypatch.setattr(sqlite_state.sqlite3, "connect", real_connect)
+    with closing(real_connect(path)) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone() == (0,)
+        assert tuple(
+            connection.execute(
+                "SELECT name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
+            )
+        ) == ()
 
 
 def test_reopen_authenticates_the_same_key_pair(tmp_path: Path) -> None:

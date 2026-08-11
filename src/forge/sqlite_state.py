@@ -232,7 +232,38 @@ def _schema_statements() -> Iterator[str]:
 
 
 def _normalize_sql(sql: str) -> str:
-    return re.sub(r"\s+", " ", sql.strip().rstrip(";")).casefold()
+    source = sql.strip().rstrip(";").rstrip()
+    normalized: list[str] = []
+    closing_quote: str | None = None
+    pending_space = False
+    index = 0
+    while index < len(source):
+        character = source[index]
+        if closing_quote is not None:
+            normalized.append(character)
+            if character == closing_quote:
+                if index + 1 < len(source) and source[index + 1] == closing_quote:
+                    normalized.append(source[index + 1])
+                    index += 2
+                    continue
+                closing_quote = None
+            index += 1
+            continue
+
+        if character.isspace():
+            pending_space = True
+            index += 1
+            continue
+        if pending_space and normalized:
+            normalized.append(" ")
+        pending_space = False
+        normalized.append(character.casefold())
+        if character in {"'", '"', "`"}:
+            closing_quote = character
+        elif character == "[":
+            closing_quote = "]"
+        index += 1
+    return "".join(normalized)
 
 
 def _statement_identity(statement: str) -> tuple[str, str, str]:
@@ -538,6 +569,7 @@ class SqliteStateLedger:
         key_handle: KeyHandle,
     ) -> SqliteStateLedger:
         connection: sqlite3.Connection | None = None
+        connection_transferred = False
         lock = threading.RLock()
         try:
             connection = sqlite3.connect(
@@ -593,19 +625,22 @@ class SqliteStateLedger:
                     connection, cipher=cipher, key_handle=key_handle
                 )
                 connection.execute("COMMIT")
-                return cls(connection, lock)
+                ledger = cls(connection, lock)
+                connection_transferred = True
+                return ledger
         except ControllerAlreadyRunning:
-            _rollback_and_close(connection)
             raise
         except EncryptionError:
-            _rollback_and_close(connection)
             raise EncryptionError() from None
         except StateError:
-            _rollback_and_close(connection)
             raise
         except sqlite3.Error:
-            _rollback_and_close(connection)
             raise StateError() from None
+        except Exception:
+            raise StateError() from None
+        finally:
+            if not connection_transferred:
+                _rollback_and_close(connection)
 
     def __enter__(self) -> SqliteStateLedger:
         with self._lock:
