@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from forge.canonical import canonical_json_bytes
 from forge.controller import (
     ControllerError,
     ControllerService,
@@ -18,6 +19,7 @@ from forge.controller import (
 )
 from forge.controller_protocol import (
     CONTROLLER_PROTOCOL_VERSION,
+    MAX_COMMAND_BYTES,
     ControllerOperation,
     ErrorCode,
     GetTaskCommand,
@@ -584,6 +586,45 @@ def test_direct_submit_revalidates_complete_command_before_any_side_effect(
 
     with pytest.raises(ProtocolError) as raised:
         service.submit_request(invalid_direct_submit(case))
+
+    assert raised.value.code is ErrorCode.INVALID_REQUEST
+    assert raised.value.operation is ControllerOperation.SUBMIT_REQUEST
+    assert str(raised.value) == "request does not satisfy the controller contract"
+    assert (clock.calls, ids.request_calls, ids.task_calls, ids.event_number) == before
+    assert cipher.encrypt_calls == []
+    assert ledger.calls == []
+
+
+def test_direct_submit_rejects_oversized_canonical_command_before_any_side_effect() -> None:
+    baseline = parse_command(fixture_bytes("valid-submit.json"))
+    assert isinstance(baseline, SubmitRequestCommand)
+    taint = tuple(
+        f"oversized:{index:04d}:" + "x" * 113 for index in range(2_100)
+    )
+    assert taint == tuple(sorted(set(taint)))
+    assert all(len(value) == 128 for value in taint)
+    document = decoded(fixture_bytes("valid-submit.json"))
+    request_document = document["request"]
+    assert type(request_document) is dict
+    security_document = request_document["security"]
+    assert type(security_document) is dict
+    security_document["taint"] = list(taint)
+    assert len(canonical_json_bytes(document)) > MAX_COMMAND_BYTES
+    command = SubmitRequestCommand(
+        replace(
+            baseline.request,
+            security=replace(baseline.request.security, taint=taint),
+        )
+    )
+    clock = CountingClock()
+    ids = SequenceIds()
+    service, ledger, cipher, _ = started(ids=ids, clock=clock)
+    ledger.calls.clear()
+    cipher.encrypt_calls.clear()
+    before = (clock.calls, ids.request_calls, ids.task_calls, ids.event_number)
+
+    with pytest.raises(ProtocolError) as raised:
+        service.submit_request(command)
 
     assert raised.value.code is ErrorCode.INVALID_REQUEST
     assert raised.value.operation is ControllerOperation.SUBMIT_REQUEST

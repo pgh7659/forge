@@ -32,6 +32,7 @@ from forge.controller_protocol import (
     parse_command,
     request_digest,
     security_digest,
+    validate_command,
 )
 from forge.task_state import TaskStatus
 
@@ -115,6 +116,30 @@ def test_command_larger_than_bound_is_rejected_before_json_load(monkeypatch: pyt
 
     assert MAX_COMMAND_BYTES == 262_144
     assert_invalid(b" " * (MAX_COMMAND_BYTES + 1))
+
+
+def test_raw_and_typed_commands_obey_exact_size_bound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    command = GetTaskCommand(TASK_ID)
+    canonical_projection = (
+        b'{"operation":"getTask","protocolVersion":"forge.dev/controller/v1alpha1",'
+        b'"taskId":"tsk_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
+    )
+    monkeypatch.setattr(protocol, "MAX_COMMAND_BYTES", len(canonical_projection))
+
+    assert parse_command(canonical_projection) == command
+    assert validate_command(command) is command
+
+    monkeypatch.setattr(protocol, "MAX_COMMAND_BYTES", len(canonical_projection) - 1)
+    with pytest.raises(ProtocolError) as raw:
+        parse_command(canonical_projection)
+    assert raw.value.code is ErrorCode.INVALID_REQUEST
+    assert raw.value.operation is None
+    with pytest.raises(ProtocolError) as typed:
+        validate_command(command)
+    assert typed.value.code is ErrorCode.INVALID_REQUEST
+    assert typed.value.operation is ControllerOperation.GET_TASK
 
 
 def test_recognized_operation_is_preserved_for_a_post_parse_contract_failure() -> None:

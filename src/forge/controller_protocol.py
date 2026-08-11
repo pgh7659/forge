@@ -250,13 +250,21 @@ def _validate_response_semantics(document: dict[str, object]) -> None:
         _validate_timestamp(result.get("updatedAt"))
 
 
+def _validate_command_size(
+    payload: object, operation: ControllerOperation | None = None
+) -> None:
+    if type(payload) is not bytes or len(payload) > MAX_COMMAND_BYTES:
+        raise _invalid(operation)
+
+
 def _validate_command_document(
     document: dict[str, object], operation: ControllerOperation
 ) -> None:
     try:
-        canonical_json_bytes(document)
+        canonical = canonical_json_bytes(document)
     except (CanonicalizationError, TypeError, ValueError, RecursionError) as exc:
         raise _invalid(operation) from exc
+    _validate_command_size(canonical, operation)
     if document.get("protocolVersion") != CONTROLLER_PROTOCOL_VERSION:
         if type(document.get("protocolVersion")) is str:
             raise ProtocolError(
@@ -276,8 +284,7 @@ def _validate_command_document(
 
 
 def parse_command(payload: bytes) -> SubmitRequestCommand | GetTaskCommand:
-    if type(payload) is not bytes or len(payload) > MAX_COMMAND_BYTES:
-        raise _invalid()
+    _validate_command_size(payload)
     try:
         text = payload.decode("utf-8", errors="strict")
         parsed = json.loads(
