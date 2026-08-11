@@ -254,9 +254,31 @@ def test_plan_validates_before_registry_access(tmp_path: Path) -> None:
     assert stdout.getvalue() == b""
     assert stderr.getvalue() == (
         "INVALID 1 issue(s)\n"
-        "/spec/target/config/value: "
+        "/spec/target/config: "
         "integers must be within the I-JSON interoperable range\n"
     )
+
+
+def test_plan_redacts_opaque_config_key_from_compatibility_pointer(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sentinel = "fixture-credential-SENTINEL-plan-config-key-3e75b4"
+    config_path = tmp_path / "sensitive-config-key.yaml"
+    _write_environment(
+        config_path,
+        config=f"{{{sentinel}: {{nested: .nan}}}}",
+    )
+
+    exit_code = main(["plan", "--config", str(config_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 4
+    assert captured.out == ""
+    assert captured.err == (
+        "INVALID 1 issue(s)\n"
+        "/spec/target/config: non-finite floats are not representable as JSON\n"
+    )
+    assert sentinel not in captured.err
 
 
 class _UnavailableAdapter:

@@ -156,7 +156,7 @@ def test_implicit_yaml_date_is_a_validation_error(tmp_path: Path) -> None:
     with pytest.raises(ConfigValidationError) as raised:
         load_and_validate(path)
 
-    assert raised.value.issues[0].pointer == "/spec/target/config/startDate"
+    assert raised.value.issues[0].pointer == "/spec/target/config"
     assert raised.value.issues[0].message == "value is not representable as JSON"
 
 
@@ -173,7 +173,7 @@ def test_non_finite_float_is_a_validation_error(tmp_path: Path) -> None:
     with pytest.raises(ConfigValidationError) as raised:
         load_and_validate(path)
 
-    assert raised.value.issues[0].pointer == "/spec/target/config/ratio"
+    assert raised.value.issues[0].pointer == "/spec/target/config"
     assert (
         raised.value.issues[0].message
         == "non-finite floats are not representable as JSON"
@@ -196,7 +196,7 @@ def test_out_of_range_integer_is_a_validation_error(
     with pytest.raises(ConfigValidationError) as raised:
         load_and_validate(path)
 
-    assert raised.value.issues[0].pointer == "/spec/target/config/value"
+    assert raised.value.issues[0].pointer == "/spec/target/config"
     assert (
         raised.value.issues[0].message
         == "integers must be within the I-JSON interoperable range"
@@ -221,7 +221,7 @@ def test_direct_document_rejects_lone_surrogate_string(surrogate: str) -> None:
     with pytest.raises(ConfigValidationError) as raised:
         validate_document(document)
 
-    assert raised.value.issues[0].pointer == "/spec/target/config/value"
+    assert raised.value.issues[0].pointer == "/spec/target/config"
     assert (
         raised.value.issues[0].message
         == "strings must not contain Unicode surrogate code points"
@@ -248,14 +248,14 @@ def test_file_document_rejects_lone_surrogate_string(
     with pytest.raises(ConfigValidationError) as raised:
         load_and_validate(path)
 
-    assert raised.value.issues[0].pointer == "/spec/target/config/value"
+    assert raised.value.issues[0].pointer == "/spec/target/config"
     assert (
         raised.value.issues[0].message
         == "strings must not contain Unicode surrogate code points"
     )
 
 
-def test_lone_surrogate_mapping_key_has_a_printable_pointer() -> None:
+def test_lone_surrogate_mapping_key_uses_safe_containing_pointer() -> None:
     document = {
         "apiVersion": "forge.dev/v1alpha1",
         "kind": "Environment",
@@ -272,7 +272,7 @@ def test_lone_surrogate_mapping_key_has_a_printable_pointer() -> None:
     with pytest.raises(ConfigValidationError) as raised:
         validate_document(document)
 
-    assert raised.value.issues[0].pointer == "/spec/target/config/\\ud800"
+    assert raised.value.issues[0].pointer == "/spec/target/config"
     assert (
         raised.value.issues[0].message
         == "object keys must not contain Unicode surrogate code points"
@@ -292,8 +292,111 @@ def test_non_string_mapping_key_is_a_validation_error(tmp_path: Path) -> None:
     with pytest.raises(ConfigValidationError) as raised:
         load_and_validate(path)
 
-    assert raised.value.issues[0].pointer == "/spec/target/config/1"
+    assert raised.value.issues[0].pointer == "/spec/target/config"
     assert raised.value.issues[0].message == "object keys must be strings for JSON"
+
+
+@pytest.mark.parametrize(
+    ("location", "expected_pointer"),
+    [
+        ("target-config", "/spec/target/config"),
+        ("executor-config", "/spec/executor/config"),
+        ("unknown-spec-key", "/spec"),
+    ],
+)
+def test_untrusted_mapping_keys_do_not_enter_compatibility_pointers(
+    location: str, expected_pointer: str
+) -> None:
+    sentinel = f"fixture-credential-SENTINEL-{location}-4c81d7"
+    document = {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Environment",
+        "metadata": {"name": "safe-pointers"},
+        "spec": {
+            "target": {
+                "connectionAdapter": "noop",
+                "runtimeAdapter": "noop",
+            }
+        },
+    }
+    invalid_value = {sentinel: {"nested": float("nan")}}
+    if location == "target-config":
+        document["spec"]["target"]["config"] = invalid_value
+    elif location == "executor-config":
+        document["spec"]["executor"] = {
+            "adapter": "noop",
+            "config": invalid_value,
+        }
+    else:
+        document["spec"][sentinel] = {"nested": float("nan")}
+
+    with pytest.raises(ConfigValidationError) as raised:
+        validate_document(document)
+
+    assert raised.value.issues[0].pointer == expected_pointer
+    assert (
+        raised.value.issues[0].message
+        == "non-finite floats are not representable as JSON"
+    )
+    assert sentinel not in repr(raised.value.issues)
+
+
+class _SensitiveNonStringKey:
+    def __init__(self, sentinel: str) -> None:
+        self.sentinel = sentinel
+        self.was_stringified = False
+
+    def __str__(self) -> str:
+        self.was_stringified = True
+        return self.sentinel
+
+
+def test_non_string_mapping_key_is_not_stringified_for_public_issue() -> None:
+    sentinel = "fixture-credential-SENTINEL-non-string-key-91b2e6"
+    key = _SensitiveNonStringKey(sentinel)
+    document = {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Environment",
+        "metadata": {"name": "non-string-key"},
+        "spec": {
+            "target": {
+                "connectionAdapter": "noop",
+                "runtimeAdapter": "noop",
+                "config": {key: "value"},
+            }
+        },
+    }
+
+    with pytest.raises(ConfigValidationError) as raised:
+        validate_document(document)
+
+    assert raised.value.issues[0].pointer == "/spec/target/config"
+    assert raised.value.issues[0].message == "object keys must be strings for JSON"
+    assert key.was_stringified is False
+    assert sentinel not in repr(raised.value.issues)
+
+
+def test_compatibility_issue_preserves_known_environment_pointer() -> None:
+    document = {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Environment",
+        "metadata": {"name": "\ud800"},
+        "spec": {
+            "target": {
+                "connectionAdapter": "noop",
+                "runtimeAdapter": "noop",
+            }
+        },
+    }
+
+    with pytest.raises(ConfigValidationError) as raised:
+        validate_document(document)
+
+    assert raised.value.issues[0].pointer == "/metadata/name"
+    assert (
+        raised.value.issues[0].message
+        == "strings must not contain Unicode surrogate code points"
+    )
 
 
 def test_root_schema_issue_uses_the_rfc_6901_root_pointer() -> None:

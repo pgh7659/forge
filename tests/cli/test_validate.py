@@ -184,7 +184,7 @@ def test_validate_rejects_mixed_mapping_keys_before_schema_validation(
     assert captured.out == ""
     assert captured.err == (
         "INVALID 1 issue(s)\n"
-        "/1: object keys must be strings for JSON\n"
+        "<root>: object keys must be strings for JSON\n"
     )
 
 
@@ -212,7 +212,7 @@ def test_validate_rejects_recursive_yaml_alias_without_traceback(
     assert captured.out == ""
     assert captured.err == (
         "INVALID 1 issue(s)\n"
-        "/spec/target/config/loop/0: "
+        "/spec/target/config: "
         "recursive values are not representable as JSON\n"
     )
 
@@ -241,11 +241,41 @@ def test_validate_rejects_lone_surrogate_without_traceback(
     assert captured.out == ""
     assert captured.err == (
         "INVALID 1 issue(s)\n"
-        "/spec/target/config/value: "
+        "/spec/target/config: "
         "strings must not contain Unicode surrogate code points\n"
     )
     assert "Traceback" not in captured.err
     assert "CanonicalizationError" not in captured.err
+
+
+def test_validate_redacts_opaque_config_key_from_compatibility_pointer(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sentinel = "fixture-credential-SENTINEL-validate-config-key-6af193"
+    path = tmp_path / "sensitive-config-key.yaml"
+    path.write_text(
+        "apiVersion: forge.dev/v1alpha1\n"
+        "kind: Environment\n"
+        "metadata: {name: safe-pointer}\n"
+        "spec:\n"
+        "  target:\n"
+        "    connectionAdapter: noop\n"
+        "    runtimeAdapter: noop\n"
+        "    config:\n"
+        f"      {sentinel}: {{nested: .nan}}\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["validate", "--config", str(path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 4
+    assert captured.out == ""
+    assert captured.err == (
+        "INVALID 1 issue(s)\n"
+        "/spec/target/config: non-finite floats are not representable as JSON\n"
+    )
+    assert sentinel not in captured.err
 
 
 def test_validate_displays_root_schema_issue_readably(tmp_path: Path, capsys) -> None:

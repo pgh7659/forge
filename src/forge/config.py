@@ -155,18 +155,64 @@ def _schema_error_sort_key(error: Any) -> tuple[object, ...]:
     )
 
 
+_ENVIRONMENT_ROOT_KEYS = frozenset({"apiVersion", "kind", "metadata", "spec"})
+_ENVIRONMENT_METADATA_KEYS = frozenset({"name"})
+_ENVIRONMENT_SPEC_KEYS = frozenset(
+    {
+        "target",
+        "gateway",
+        "assistant",
+        "executor",
+        "state",
+        "workspace",
+        "sourceControl",
+        "secrets",
+    }
+)
+_ENVIRONMENT_ADAPTER_SECTIONS = _ENVIRONMENT_SPEC_KEYS - {"target"}
+_ENVIRONMENT_TARGET_KEYS = frozenset(
+    {"connectionAdapter", "runtimeAdapter", "config"}
+)
+_ENVIRONMENT_ADAPTER_KEYS = frozenset({"adapter", "config"})
+_ENVIRONMENT_EXECUTOR_KEYS = _ENVIRONMENT_ADAPTER_KEYS | {"maxConcurrency"}
+
+
+def _known_environment_mapping_keys(path: tuple[str, ...]) -> frozenset[str]:
+    if path == ():
+        return _ENVIRONMENT_ROOT_KEYS
+    if path == ("metadata",):
+        return _ENVIRONMENT_METADATA_KEYS
+    if path == ("spec",):
+        return _ENVIRONMENT_SPEC_KEYS
+    if path == ("spec", "target"):
+        return _ENVIRONMENT_TARGET_KEYS
+    if (
+        len(path) == 2
+        and path[0] == "spec"
+        and path[1] in _ENVIRONMENT_ADAPTER_SECTIONS
+    ):
+        if path[1] == "executor":
+            return _ENVIRONMENT_EXECUTOR_KEYS
+        return _ENVIRONMENT_ADAPTER_KEYS
+    return frozenset()
+
+
 def _json_compatibility_issues(document: object) -> tuple[ValidationIssue, ...]:
     issues: list[ValidationIssue] = []
     active_containers: set[int] = set()
 
-    def visit(value: object, parts: list[object]) -> None:
+    def visit(
+        value: object,
+        pointer_parts: tuple[str, ...],
+        schema_path: tuple[str, ...] | None,
+    ) -> None:
         if value is None or type(value) is bool:
             return
         if type(value) is str:
             if _has_surrogate_code_point(value):
                 issues.append(
                     ValidationIssue(
-                        pointer=_json_pointer(parts),
+                        pointer=_json_pointer(list(pointer_parts)),
                         message="strings must not contain Unicode surrogate code points",
                     )
                 )
@@ -175,7 +221,7 @@ def _json_compatibility_issues(document: object) -> tuple[ValidationIssue, ...]:
             if not -9007199254740991 <= value <= 9007199254740991:
                 issues.append(
                     ValidationIssue(
-                        pointer=_json_pointer(parts),
+                        pointer=_json_pointer(list(pointer_parts)),
                         message="integers must be within the I-JSON interoperable range",
                     )
                 )
@@ -184,7 +230,7 @@ def _json_compatibility_issues(document: object) -> tuple[ValidationIssue, ...]:
             if not math.isfinite(value):
                 issues.append(
                     ValidationIssue(
-                        pointer=_json_pointer(parts),
+                        pointer=_json_pointer(list(pointer_parts)),
                         message="non-finite floats are not representable as JSON",
                     )
                 )
@@ -194,7 +240,7 @@ def _json_compatibility_issues(document: object) -> tuple[ValidationIssue, ...]:
             if container_id in active_containers:
                 issues.append(
                     ValidationIssue(
-                        pointer=_json_pointer(parts),
+                        pointer=_json_pointer(list(pointer_parts)),
                         message="recursive values are not representable as JSON",
                     )
                 )
@@ -202,39 +248,59 @@ def _json_compatibility_issues(document: object) -> tuple[ValidationIssue, ...]:
             active_containers.add(container_id)
             try:
                 if type(value) is list:
-                    for index, item in enumerate(value):
-                        visit(item, [*parts, index])
+                    for item in value:
+                        visit(item, pointer_parts, None)
                 else:
+                    known_keys = (
+                        _known_environment_mapping_keys(schema_path)
+                        if schema_path is not None
+                        else frozenset()
+                    )
                     for key, item in value.items():
                         if type(key) is not str:
                             issues.append(
                                 ValidationIssue(
-                                    pointer=_json_pointer([*parts, key]),
+                                    pointer=_json_pointer(list(pointer_parts)),
                                     message="object keys must be strings for JSON",
                                 )
                             )
+                            child_pointer = pointer_parts
+                            child_schema_path = None
                         elif _has_surrogate_code_point(key):
                             issues.append(
                                 ValidationIssue(
-                                    pointer=_json_pointer([*parts, key]),
+                                    pointer=_json_pointer(list(pointer_parts)),
                                     message=(
                                         "object keys must not contain Unicode "
                                         "surrogate code points"
                                     ),
                                 )
                             )
-                        visit(item, [*parts, key])
+                            child_pointer = pointer_parts
+                            child_schema_path = None
+                        elif key in known_keys:
+                            assert schema_path is not None
+                            child_pointer = (*pointer_parts, key)
+                            child_schema_path = (
+                                None
+                                if key == "config"
+                                else (*schema_path, key)
+                            )
+                        else:
+                            child_pointer = pointer_parts
+                            child_schema_path = None
+                        visit(item, child_pointer, child_schema_path)
             finally:
                 active_containers.remove(container_id)
             return
         issues.append(
             ValidationIssue(
-                pointer=_json_pointer(parts),
+                pointer=_json_pointer(list(pointer_parts)),
                 message="value is not representable as JSON",
             )
         )
 
-    visit(document, [])
+    visit(document, (), ())
     return tuple(sorted(issues, key=lambda issue: (issue.pointer, issue.message)))
 
 
