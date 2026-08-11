@@ -11,6 +11,9 @@ boundary that is costly to change.
   taint, provenance, policy-decision, and sink contracts.
 - `0009-separate-portable-core-from-deployment-profiles.md` — public core,
   private deployment configuration, and public reference-deployment boundary.
+- `0010-adopt-a-contract-first-single-node-controller-core.md` — versioned
+  in-process controller, encrypted request bodies in SQLite, bounded
+  scheduling, and conservative restart recovery.
 
 Historical decisions for the first stack live with the [Hermes, Discord, and
 Codex reference deployment](../reference-deployments/hermes-discord-codex/decisions/).
