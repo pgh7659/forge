@@ -3,13 +3,28 @@
 ## Status and Scope
 
 This document is the chosen threat model for Forge's reusable security
-contracts. It documents design obligations; it does not claim that runtime or
-host controls are implemented.
+contracts. It documents design obligations and the narrow Slice 3 evidence
+below; it does not claim general runtime or host controls are implemented.
 
 The model covers data and actions moving among operators, agents, models,
 runtimes, tools, repositories, external services, and host adapters. It is
 runtime-neutral. Deployment-specific controls may strengthen this baseline but
 must not weaken its fail-closed semantics.
+
+### Implemented Slice 3 boundary
+
+Slice 3 implements structural validation and lossless preservation of the
+minimum `forge.dev/security/v1alpha1` envelope embedded in controller requests,
+including unknown valid taints. It also encrypts request bodies at the SQLite
+storage boundary. This is a narrow in-process controller and storage-adapter
+boundary, not the full security contract.
+
+These checks do not authenticate callers, validate provenance chains or
+attestations, increase trust, remove taint, authorize an effect, deliver or
+manage keys, isolate code, or prove runtime, host, network, or
+external-service enforcement. Broader security schemas, full validators,
+policy evaluation, adapter capability enforcement, and host controls remain
+future work.
 
 ## Security Objectives
 
@@ -155,11 +170,12 @@ Those controls belong to implementation and deployment work. A future claim
 that one is implemented must identify its owner, enforcement point, tests,
 failure mode, and residual risk.
 
-## Validation Plan
+## Remaining Validation Plan
 
-Proposed implementation work should add:
+Future security-contract implementation should add:
 
-- schema-valid and schema-invalid fixtures;
+- full-contract schema-valid and schema-invalid fixtures beyond the minimum
+  embedded controller envelope;
 - trust-upgrade and taint-laundering negative tests;
 - provenance truncation, redaction, and chain-integrity tests;
 - approval scope, freshness, replay, and revocation tests;
@@ -167,5 +183,6 @@ Proposed implementation work should add:
 - deny-by-default sink tests; and
 - public-artifact hygiene scans.
 
-Until that evidence exists, only the threat model and contract design are
-implemented as documentation.
+Current Slice 3 evidence is limited to structural minimum-envelope checks,
+lossless preservation, encrypted request-body storage, and redacted controller
+errors. It does not satisfy the remaining security-contract validation plan.

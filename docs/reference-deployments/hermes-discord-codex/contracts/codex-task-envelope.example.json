@@ -1,0 +1,54 @@
+{
+  "contract_version": "forge.task/v1alpha1",
+  "task_id": "example-task-id",
+  "source": {
+    "kind": "discord-forum-post",
+    "channel_reference": "opaque-project-channel-reference",
+    "post_reference": "opaque-forum-post-reference",
+    "message_reference": "opaque-source-message-reference"
+  },
+  "project": "registered-project-key",
+  "mode": "run",
+  "request_id": "opaque-immutable-inbox-reference",
+  "raw_request": "Preserve the operator request verbatim in private task state.",
+  "raw_request_sha256": "replace-with-lowercase-hex-sha256",
+  "repository": {
+    "full_name": "owner/repository",
+    "base_ref": "main",
+    "base_commit": "resolved-full-commit-sha",
+    "task_branch": "feat/example-task"
+  },
+  "workspace": {
+    "kind": "worktree",
+    "owner": "oci"
+  },
+  "acceptance_criteria": [
+    "Replace this example with criteria accepted after planning."
+  ],
+  "validation_commands": [],
+  "allowed_actions": [
+    "read",
+    "edit-worktree",
+    "test",
+    "commit",
+    "push-task-branch",
+    "create-draft-pr"
+  ],
+  "approval_required": [
+    "merge",
+    "deploy",
+    "migration",
+    "destructive-action",
+    "credential-use"
+  ],
+  "executor": {
+    "kind": "codex-cli",
+    "session_id": null
+  },
+  "handoff": {
+    "last_pushed_commit": null,
+    "pull_request": null,
+    "state": "queued",
+    "waiting_on": []
+  }
+}

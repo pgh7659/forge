@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forge.dev/schemas/controller/v1alpha1/response.json",
+  "title": "Forge controller response v1alpha1",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "operation", "ok", "result"],
+      "properties": {
+        "protocolVersion": {"const": "forge.dev/controller/v1alpha1"},
+        "operation": {"const": "submitRequest"},
+        "ok": {"const": true},
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requestId", "taskId", "status", "disposition"],
+          "properties": {
+            "requestId": {"$ref": "#/$defs/controllerRequestId"},
+            "taskId": {"$ref": "#/$defs/controllerTaskId"},
+            "status": {"$ref": "#/$defs/taskStatus"},
+            "disposition": {"enum": ["created", "replayed"]}
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "operation", "ok", "result"],
+      "properties": {
+        "protocolVersion": {"const": "forge.dev/controller/v1alpha1"},
+        "operation": {"const": "getTask"},
+        "ok": {"const": true},
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requestId", "taskId", "mode", "status", "createdAt", "updatedAt"],
+          "properties": {
+            "requestId": {"$ref": "#/$defs/controllerRequestId"},
+            "taskId": {"$ref": "#/$defs/controllerTaskId"},
+            "mode": {"const": "plan"},
+            "status": {"$ref": "#/$defs/taskStatus"},
+            "reasonCode": {"$ref": "#/$defs/token"},
+            "createdAt": {"$ref": "#/$defs/utcTimestamp"},
+            "updatedAt": {"$ref": "#/$defs/utcTimestamp"}
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "operation", "ok", "error"],
+      "properties": {
+        "protocolVersion": {"const": "forge.dev/controller/v1alpha1"},
+        "operation": {"enum": ["submitRequest", "getTask", "unknown"]},
+        "ok": {"const": false},
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": {"enum": ["unsupported_protocol", "invalid_request", "idempotency_conflict", "task_not_found", "invalid_transition", "controller_already_running", "state_error", "encryption_error"]},
+            "message": {"type": "string", "minLength": 1, "maxLength": 256}
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "token": {"type": "string", "pattern": "^[a-z][a-z0-9._:-]{0,127}(?![\\s\\S])"},
+    "controllerRequestId": {"type": "string", "pattern": "^req_[0-9a-f]{32}(?![\\s\\S])"},
+    "controllerTaskId": {"type": "string", "pattern": "^tsk_[0-9a-f]{32}(?![\\s\\S])"},
+    "utcTimestamp": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z(?![\\s\\S])"},
+    "taskStatus": {"enum": ["queued", "running", "waiting_user", "waiting_approval", "review_ready", "completed", "failed", "cancelled"]}
+  }
+}

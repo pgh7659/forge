@@ -1,0 +1,9 @@
+apiVersion: forge.dev/v1alpha1
+kind: Environment
+metadata:
+  name: invalid-extra-key
+spec:
+  target:
+    connectionAdapter: ssh
+    runtimeAdapter: systemd
+  unexpected: true

@@ -2,15 +2,31 @@
 
 ## Project Maturity
 
-Forge is currently in its documentation and contract phase. The repository
-contains architectural choices and proposed controls, but it does not yet ship
-a hardened runtime or claim to enforce host isolation.
+Forge is pre-release. The repository now ships portable validation and
+planning code plus an in-process controller and first SQLite state adapter, but
+it does not ship a hardened runtime or claim to enforce host isolation.
 
 The security contracts adopted by
 [ADR-0007](docs/adr/0007-adopt-runtime-neutral-security-contracts.md) are the
 chosen design. Their schemas, validators, policy engine, runtime adapters, and
-host enforcement are proposed work unless a later document links to tested
-implementation evidence.
+host enforcement remain proposed unless a later document links to narrowly
+scoped implementation evidence.
+
+## Implemented Controller Security Boundary
+
+Slice 3 implements structural validation and lossless preservation of the
+minimum `forge.dev/security/v1alpha1` envelope embedded in controller requests.
+Unknown valid taint values are preserved when the envelope is forwarded. Slice
+3 also encrypts request bodies at the SQLite storage boundary; it does not
+claim whole-database encryption, and operational key delivery and management
+remain outside the core.
+
+These checks do not authenticate callers, validate provenance chains or
+attestations, increase trust, remove taint, authorize an effect, deliver or
+manage keys, isolate code, or prove runtime, host, network, or
+external-service enforcement. Structural validation is not host enforcement.
+The broader security schemas, full validators, policy engine, adapter
+capability enforcement, and host controls remain future work.
 
 ## Supported Versions
 

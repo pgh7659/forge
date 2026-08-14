@@ -1,0 +1,9 @@
+apiVersion: forge.dev/v1alpha1
+kind: Environment
+metadata:
+  name: first
+  name: second
+spec:
+  target:
+    connectionAdapter: ssh
+    runtimeAdapter: systemd

@@ -1,20 +1,20 @@
 # Architecture Decision Records
 
-Record durable architecture decisions here.
+This directory records durable decisions for the portable Forge core. Create an
+ADR for a public contract, interface, compatibility rule, or architecture
+boundary that is costly to change.
 
-Create an ADR when a change introduces a new layer, expensive-to-replace
-dependency, provider contract, infrastructure pattern, or long-lived workflow
-rule.
+## Current index
 
-## Current ADR Index
+- `0000-template.md` — template for new decisions.
+- `0007-adopt-runtime-neutral-security-contracts.md` — runtime-neutral trust,
+  taint, provenance, policy-decision, and sink contracts.
+- `0009-separate-portable-core-from-deployment-profiles.md` — public core,
+  private deployment configuration, and public reference-deployment boundary.
+- `0010-adopt-a-contract-first-single-node-controller-core.md` — versioned
+  in-process controller, encrypted request bodies in SQLite, bounded
+  scheduling, and conservative restart recovery.
 
--   `0000-template.md` - template for new decisions
--   `0001-use-hermes-as-initial-orchestrator.md`
--   `0002-use-host-install-on-oci-for-first-deployment.md`
--   `0003-use-discord-as-primary-operator-interface.md`
--   `0004-use-tailscale-for-private-dashboard-access.md`
--   `0005-use-protected-checkouts-and-hermes-worktrees.md` - protected checkouts
-    and Hermes-native task worktrees
--   `0006-use-hermes-profiles-kanban-and-provider-fallback.md`
--   `0007-adopt-runtime-neutral-security-contracts.md` - trust, taint,
-    provenance, policy-decision, and sink contracts
+Historical decisions for the first stack live with the [Hermes, Discord, and
+Codex reference deployment](../reference-deployments/hermes-discord-codex/decisions/).
+They retain their original rationale but govern that deployment only.
