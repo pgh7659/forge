@@ -134,7 +134,7 @@ For each project:
 - deploy only an approved commit from the protected branch.
 
 Do not onboard a sensitive or production repository before the disposable
-vertical slice passes.
+reference-deployment run slice passes.
 
 ## Stage 6 - Acceptance
 

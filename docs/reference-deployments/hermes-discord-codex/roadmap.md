@@ -89,7 +89,10 @@ secret-safe logs. A lost host must be recoverable without losing platform
 knowledge, and a clean replacement environment must restore the control-plane
 state without copied build artifacts.
 
-## Reference vertical slice and broader evolution
+## Reference Deployment Run Slice and Broader Evolution
+
+This deployment-specific `/dev run` slice is distinct from the portable MVP
+acceptance slice, whose engineering-request path is read-only `/dev plan`.
 
 Before adding projects or executor concurrency, demonstrate this path on a
 disposable repository: Discord request → Hermes gateway → immutable inbox →

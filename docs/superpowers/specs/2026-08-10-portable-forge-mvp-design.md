@@ -3,8 +3,12 @@
 ## Status
 
 Approved for implementation planning on 2026-08-10. This document defines the
-target architecture and the ordered vertical slices. It does not claim that
-the runtime, adapters, provisioning, or OCI reconciliation are implemented.
+target architecture and the ordered delivery slices. Delivery Slices 1-3 are
+implemented in the current source tree; Slices 4-8 remain planned or
+separately approval-gated. It does not claim that ingress or executor adapters,
+provisioning, private deployment configuration, or OCI reconciliation are
+implemented. Current delivery status is tracked in the
+[roadmap](../../roadmap.md).
 
 The portable-root and reference-deployment boundary is recorded by
 [ADR-0009](../../adr/0009-separate-portable-core-from-deployment-profiles.md).
@@ -64,7 +68,7 @@ Supporting one concrete stack first is validation, not platform identity.
 - Make the first deployment safe to repeat and safe to roll back.
 - Keep personal and sensitive deployment values out of the public repository.
 
-## Non-goals for the First Vertical Slice
+## Non-goals for the Portable MVP Acceptance Slice
 
 - `/dev run` implementation, automatic commits, pushes, or Draft PR creation;
 - merge, deployment, migration, or destructive automation;
@@ -256,7 +260,7 @@ The core defines behavior and conformance tests for these adapter roles:
 
 The first reference adapters are SSH, Ansible plus systemd, Hermes Discord,
 Codex CLI, SQLite, Git worktree, GitHub, and 1Password-backed secret
-resolution. Only adapters required by the current vertical slice need to be
+resolution. Only adapters required by the current delivery slice need to be
 implemented initially.
 
 ## Hermes and Discord Ingress
@@ -415,10 +419,11 @@ product data automatically.
 - controller restart during `queued`, `running`, and `waiting_user`; and
 - repeated systemd provisioning on a disposable Ubuntu host.
 
-### Reference-deployment acceptance
+### Portable MVP Acceptance on the Reference Deployment
 
-The first installable release is accepted only when a non-sensitive Forum post
-can complete this path on the current Ubuntu ARM64 reference host:
+The first installable release satisfies the portable MVP acceptance slice only
+when a non-sensitive Forum post can complete this read-only request path on the
+current Ubuntu ARM64 reference host:
 
 ```text
 /dev plan

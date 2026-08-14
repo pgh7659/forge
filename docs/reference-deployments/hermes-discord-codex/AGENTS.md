@@ -14,9 +14,11 @@ requirements.
   topic and primary Codex session.
 - Post creation does not execute code. `/dev plan` is read-only; `/dev run`
   explicitly authorizes implementation within the declared task boundary.
-- Keep the Hermes dashboard private through this deployment's selected network
-  controls and dashboard authentication. Do not document unrestricted public
-  dashboard exposure as the default.
+- Keep the Hermes dashboard private. The recorded design treats authenticated
+  Tailnet membership and Tailnet ACLs at Tailscale Serve as the remote-access
+  identity boundary; it does not claim separate Hermes application-layer
+  dashboard authentication. Do not document unrestricted public dashboard
+  exposure as the default.
 - Hermes owns personal conversation, reminders, factual status, routing
   confirmation, and delivery of Codex questions and results. The gateway
   captures the original message before model interpretation and dispatches an

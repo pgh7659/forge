@@ -44,6 +44,13 @@ does not provision the Nous dashboard OAuth client ID required by the bundled
 dashboard provider. Loopback plus Tailscale Serve therefore preserves a private
 identity boundary without bypassing Hermes' non-loopback safety check.
 
+### Authentication Boundary Clarification
+
+For this reference deployment, authenticated Tailnet membership and Tailnet
+ACLs form the remote-access identity boundary. Caddy performs compatibility
+proxying only, and no separate Hermes application-layer dashboard auth
+provider is claimed.
+
 ## Alternatives Considered
 
 - Public reverse proxy with password protection

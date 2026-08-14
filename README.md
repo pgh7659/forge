@@ -23,8 +23,9 @@ make validate
 .venv/bin/forge plan --config examples/environments/noop.yaml
 ```
 
-The same commands reproduce the checked-out feature branch without local
-runtime state. `forge plan --config examples/environments/noop.yaml` performs
+The same commands reproduce the checked-out source tree without requiring
+deployment runtime state.
+`forge plan --config examples/environments/noop.yaml` performs
 no target access or mutation: its built-in adapter observes `{}` and produces
 no operations. `ssh+systemd` remains schema-valid but planning-unavailable
 until a later reviewed real-adapter slice; there is no fallback or adapter

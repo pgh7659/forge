@@ -2,6 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Plan status:** This delivery slice is implemented in the current source
+> tree. The unchecked boxes preserve the original procedure; they are not a
+> retrospective execution record and do not claim that every prescribed RED
+> observation was captured. Current delivery status is tracked in the
+> [roadmap](../../roadmap.md).
+
 **Goal:** Restore Forge's provider-independent public boundary and deliver an installable Python CLI that validates `forge.dev/v1alpha1` environment documents.
 
 **Architecture:** Keep deployment-neutral policy, schemas, and CLI code at the repository root. Preserve the current OCI/Hermes/Discord/Codex material as a named public reference deployment rather than deleting it or treating it as Forge's identity. Implement `forge validate` as an offline operation over a packaged JSON Schema; target observation, planning, applying, the controller, and runtime adapters remain separate delivery slices.
@@ -1201,7 +1207,7 @@ Expected: success without SSH, network, OCI, Discord, GitHub, Hermes, or Codex a
 
 Run: `git status --short --branch`
 
-Expected: no unstaged implementation files and the feature branch is ahead of its remote only by intentional commits.
+Expected: no unstaged implementation files and the working branch is ahead of its remote only by intentional commits.
 
 Run: `git log --oneline origin/main..HEAD`
 

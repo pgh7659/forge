@@ -2,7 +2,9 @@
 
 ## Status and scope
 
-Approved Slice 2 design for one implementation plan. This slice adds an
+Approved Slice 2 design for one implementation plan. Slice 2 is implemented in
+the current source tree. Current delivery status is tracked in the
+[roadmap](../../roadmap.md). This slice adds an
 offline-capable planning client, deterministic plan artifacts, stale-plan
 detection, and one non-privileged reference adapter. It extends the portable
 foundation and deliberately tightens its pre-release compatibility contract:
@@ -260,11 +262,13 @@ directly and must confirm that expected error paths do not write an artifact.
 ## Plan verification and stale-plan contract
 
 Core first exposes `verify_plan(document) -> VerifiedPlan`. Verification is
-fail-closed and ordered: validate the strict Plan schema; recompute and compare
-the observation digest; remove only `/metadata/id`, recompute and compare the
-plan ID; and reject an unsupported planning contract version. Unknown fields,
-malformed or mismatched digests, and tampered IDs are invalid plans. They are
-never represented as a safely current boolean result.
+fail-closed and ordered: canonicalize the input to establish JSON/I-JSON
+compatibility; validate the strict Plan schema, including the supported
+planning contract version; reject duplicate operation IDs; recompute and
+compare the observation digest; then remove only `/metadata/id`, recompute,
+and compare the Plan ID. Unknown fields, unsupported versions, duplicate
+operation IDs, malformed or mismatched digests, and tampered IDs are invalid
+plans. They are never represented as a safely current boolean result.
 
 Core then exposes a pure predicate equivalent to:
 

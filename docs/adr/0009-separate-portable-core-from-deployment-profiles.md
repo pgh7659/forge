@@ -33,3 +33,12 @@ provider choices. Reference deployments remain reviewable examples and may
 document their own operational constraints through nested guidance. Future
 private deployment configuration begins only after a published configuration
 contract, and does not copy Forge source or resolved secret values.
+
+## Rollback
+
+Before a release depends on this boundary, rollback may use a focused revert
+and a superseding ADR. Preserve the reference-deployment history and all
+private deployment inventory; rollback must not copy private inventory,
+credentials, or resolved values into the public core. After release, an
+incompatible boundary change requires a versioned migration and superseding
+ADR.

@@ -30,6 +30,8 @@ separately in the private inventory:
 
 - OCI tenancy and compartment references as opaque private identifiers;
 - VCN, NSG, security-list, public-ingress, and boot-volume policy;
+- host-firewall implementation and active rules, such as `ufw`, nftables, or
+  iptables, with an owner for every non-default ingress rule;
 - backup destination, encryption, retention, and last restore test;
 - Discord allowlist and bot permissions without storing its token;
 - Tailscale ACL ownership and Funnel-disabled evidence;
@@ -46,6 +48,8 @@ The audit is accepted when:
 - profiles, services, timers, listeners, repositories, and worktrees are
   accounted for;
 - public listeners and privileged credentials have explicit owners;
+- host-firewall state and every non-default ingress rule have an explicit
+  owner;
 - dirty or unpushed worktrees are preserved;
 - observed state is reconciled with the [reference architecture](../architecture.md)
   and [reference roadmap](../roadmap.md); and

@@ -2,7 +2,9 @@
 
 ## Status
 
-Approved for implementation planning on 2026-08-11.
+Approved for implementation planning on 2026-08-11. Slice 3 is implemented in
+the current source tree. Current delivery status is tracked in the
+[roadmap](../../roadmap.md).
 
 This design is Slice 3 of the approved portable Forge MVP. It defines a small,
 transport-neutral controller core and its first durable state implementation.

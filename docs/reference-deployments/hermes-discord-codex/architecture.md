@@ -104,6 +104,11 @@ not bind a public or Tailnet address, Tailscale Funnel is forbidden, and public
 security rules do not expose dashboard ports. The selected Caddy and systemd
 assets are under [assets](assets/).
 
+In this recorded topology, authenticated dashboard access means Tailnet
+membership and ACL enforcement at Tailscale Serve. Caddy performs Host-header
+normalization only and is not an authentication layer; no separate Hermes
+application-layer dashboard auth provider is claimed.
+
 ## Provider, security, and approval boundaries
 
 Hermes provider fallback handles eligible API failures inside the assistant

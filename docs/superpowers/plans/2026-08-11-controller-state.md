@@ -2,6 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Plan status:** This delivery slice is implemented in the current source
+> tree. The unchecked boxes preserve the original procedure; they are not a
+> retrospective execution record and do not claim that every prescribed RED
+> observation was captured. Current delivery status is tracked in the
+> [roadmap](../../roadmap.md).
+
 **Goal:** Add a strict transport-neutral controller protocol, an injected in-process controller core, authenticated request-body encryption, and a single-controller SQLite ledger with idempotent ingestion, atomic task transitions, bounded scheduling, and conservative restart reconciliation.
 
 **Architecture:** Immutable protocol models feed a controller application service that owns request identity, encryption orchestration, readiness, and public error mapping. Pure state rules and a database-neutral ledger protocol isolate policy from persistence; the first SQLite adapter owns one long-lived serialized connection, exact schema version 1, exclusive process ownership, transactions, scheduling, and reconciliation. AES-256-GCM receives caller-supplied key material through a narrow cipher boundary; no transport, executor, workspace, secret provider, or host adapter is connected in this slice.

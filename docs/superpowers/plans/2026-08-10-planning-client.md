@@ -2,6 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Plan status:** This delivery slice is implemented in the current source
+> tree. The unchecked boxes preserve the original procedure; they are not a
+> retrospective execution record and do not claim that every prescribed RED
+> observation was captured. Current delivery status is tracked in the
+> [roadmap](../../roadmap.md).
+
 **Goal:** Add a provider-neutral, non-mutating `forge plan` vertical slice with RFC 8785 identities, a strict Plan contract, exact adapter resolution, a built-in `noop+noop` adapter, and fail-closed stale-plan detection.
 
 **Architecture:** Environment and Plan identities share one RFC 8785/JCS canonicalization module. Planning core owns immutable canonical bytes, strict schema and ID verification, and pure stale comparison; an injected exact-tuple registry owns adapter selection, with only `("noop", "noop")` registered by the CLI. The command validates configuration before adapter resolution and emits one canonical JSON Plan plus a framing newline without target access.
@@ -203,7 +209,14 @@ operation.details            object
 
 Create `src/forge/planning.py` with frozen `AdapterKey`, a frozen `PlanningBasis` that stores `observation_bytes` and `operations_bytes`, and artifact types that store canonical bytes. Use `json.loads` only to return fresh copies. Implement the exact ID projection by copying the materialized preimage, inserting `metadata.id` only after `sha256_identifier(preimage)`, and canonicalizing the final document. Load and self-check the packaged schema with `Draft202012Validator.check_schema`.
 
-`verify_plan` must validate schema first, then operation-ID uniqueness, observation digest, and the Plan ID produced after omitting only `metadata.id`. Return `VerifiedPlan(canonical_bytes, plan_id)` or raise `PlanContractError` with an owned non-sensitive reason. `is_stale` accepts only `VerifiedPlan` and `PlanningBasis`, materializes the candidate ID, and compares IDs without I/O.
+`verify_plan` must first canonicalize the input to establish JSON/I-JSON
+compatibility, then validate the strict schema including the supported
+planning contract version, reject duplicate operation IDs, recompute and
+compare the observation digest, and finally recompute and compare the Plan ID
+after omitting only `metadata.id`. Return
+`VerifiedPlan(canonical_bytes, plan_id)` or raise `PlanContractError` with an
+owned non-sensitive reason. `is_stale` accepts only `VerifiedPlan` and
+`PlanningBasis`, materializes the candidate ID, and compares IDs without I/O.
 
 - [ ] **Step 8: Run Task 1 tests and the full foundation suite**
 
@@ -425,7 +438,7 @@ Update the listed documents to state:
 - Plan instances are private review/audit data by default and do not prove deployability, safety, secret absence, or real target observation;
 - `forge plan -f examples/environments/noop.yaml` performs no target access or mutation;
 - apply, doctor, controller/state, real adapters, `forge-ops`, OCI reconciliation, merge, and deployment remain unimplemented or separately approval-gated;
-- roadmap Slice 1 and Slice 2 are implemented on the feature branch, while Slice 3 is next.
+- roadmap Slice 1 and Slice 2 are implemented in the source tree as of this plan, while Slice 3 is next.
 
 Document the Python `>=3.12` setup, `make validate`, and both CLI examples so a new PC can reproduce the branch without local state.
 

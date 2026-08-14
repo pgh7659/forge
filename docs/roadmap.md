@@ -4,14 +4,14 @@ The [approved portable MVP design](superpowers/specs/2026-08-10-portable-forge-m
 defines these ordered delivery slices. Each slice needs its own implementation
 plan and reviewable commit or PR.
 
-1. **Portable foundation — implemented on this feature branch:** replace deployment-specific root policy with the
+1. **Portable foundation — implemented:** replace deployment-specific root policy with the
    core/adapter/reference-deployment boundary and publish
    `forge.dev/v1alpha1` plus `forge validate`.
-2. **Planning client — implemented on this feature branch:** add deterministic
+2. **Planning client — implemented:** add deterministic
    Plan artifacts, stale-plan detection, and the exact built-in `noop+noop`
    adapter. It performs no target access or mutation; `ssh+systemd` remains
    schema-valid but planning-unavailable pending a reviewed real adapter.
-3. **Controller and state — implemented on this feature branch:** add the
+3. **Controller and state — implemented:** add the
    strict in-process service protocol, pure transitions, AES-256-GCM
    request-body boundary, and first single-node SQLite state adapter. Tests
    verify idempotency, atomic task events and transitions, configurable
